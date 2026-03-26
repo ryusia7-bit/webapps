@@ -225,11 +225,37 @@ const SCALE_SYNC_CONFIG = {
   }
 };
 
+const SCALE_AUTH_CONFIG = {
+  propertyKeys: {
+    accounts: "mindmap_webapp_auth_accounts_v1",
+    sessions: "mindmap_webapp_auth_sessions_v1"
+  },
+  sessionTtlHours: 24 * 7,
+  defaultAccounts: [
+    {
+      username: "admin0109",
+      password: "admin0109",
+      displayName: "관리자",
+      role: "admin"
+    },
+    {
+      username: "ryusia7@homeless.go.kr",
+      password: "admin0109",
+      displayName: "ryusia7@homeless.go.kr",
+      role: "admin"
+    }
+  ]
+};
+
 let questionnaireBundleCache_ = null;
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.ping === "1") {
+    return ContentService.createTextOutput("ok");
+  }
+
   if (e && e.parameter && e.parameter.format === "json") {
-    return createJsonOutput_(buildStatusPayload_());
+    return createJsonOutput_(getScaleWebappBootstrap(e.parameter.sessionToken || e.parameter.token || ""));
   }
 
   const template = HtmlService.createTemplateFromFile("Index");
@@ -271,24 +297,47 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-function getScaleWebappBootstrap() {
-  return buildStatusPayload_();
+function loginScaleWebapp(username, password) {
+  const account = authenticateScaleWebappUser_(username, password);
+  const sessionContext = createScaleWebappSession_(account);
+  return buildBootstrapPayload_(sessionContext);
 }
 
-function prepareScaleWebapp() {
+function logoutScaleWebapp(sessionToken) {
+  invalidateScaleWebappSession_(sessionToken);
+  return buildPublicBootstrap_();
+}
+
+function getScaleWebappBootstrap(sessionToken) {
+  const normalizedToken = normalizeText_(sessionToken);
+  const sessionContext = getSessionContext_(normalizedToken);
+  const bootstrap = buildBootstrapPayload_(sessionContext);
+
+  if (normalizedToken && !sessionContext) {
+    bootstrap.sessionExpired = true;
+    bootstrap.loginHint = "세션이 만료되었습니다. 다시 로그인해주세요.";
+  }
+
+  return bootstrap;
+}
+
+function prepareScaleWebapp(sessionToken) {
+  const sessionContext = requireScaleWebappSession_(sessionToken);
   ensureManagedSheets_();
   const masterSync = syncQuestionnaireMaster_();
   return Object.assign(
     {
       ok: true,
+      authenticated: true,
       masterSync: masterSync
     },
-    buildStatusPayload_()
+    buildStatusPayload_(sessionContext)
   );
 }
 
-function saveScaleRecord(record) {
-  const normalizedRecord = normalizeRecord_(record);
+function saveScaleRecord(sessionToken, record) {
+  const sessionContext = requireScaleWebappSession_(sessionToken);
+  const normalizedRecord = normalizeRecord_(record, sessionContext);
   ensureManagedSheets_();
   const masterSync = syncQuestionnaireMaster_();
 
@@ -308,40 +357,48 @@ function saveScaleRecord(record) {
 
   return {
     ok: true,
+    authenticated: true,
     record: normalizedRecord,
     masterSync: masterSync,
     syncResult: result,
     recentRecords: listRecentScaleRecordsInternal_(SCALE_WEBAPP_CONFIG.defaultHistoryLimit),
-    status: buildStatusPayload_()
+    status: buildStatusPayload_(sessionContext)
   };
 }
 
-function listRecentScaleRecords(limit) {
+function listRecentScaleRecords(sessionToken, limit) {
+  requireScaleWebappSession_(sessionToken);
   return {
     ok: true,
+    authenticated: true,
     records: listRecentScaleRecordsInternal_(limit)
   };
 }
 
-function syncScaleQuestionnaireMaster() {
+function syncScaleQuestionnaireMaster(sessionToken) {
+  const sessionContext = requireScaleWebappSession_(sessionToken);
   ensureManagedSheets_();
   return {
     ok: true,
+    authenticated: true,
     masterSync: syncQuestionnaireMaster_(true),
-    status: buildStatusPayload_()
+    status: buildStatusPayload_(sessionContext)
   };
 }
 
-function setupScaleScreeningSheets() {
+function setupScaleScreeningSheets(sessionToken) {
+  requireScaleWebappSession_(sessionToken);
   ensureManagedSheets_();
   return {
     ok: true,
+    authenticated: true,
     message: "척도검사 저장용 시트를 준비했습니다.",
     targetSpreadsheetId: getTargetSpreadsheetId_()
   };
 }
 
-function setTargetSpreadsheetId(spreadsheetId) {
+function setTargetSpreadsheetId(sessionToken, spreadsheetId) {
+  requireScaleWebappSession_(sessionToken);
   const normalized = normalizeText_(spreadsheetId);
   if (!normalized) {
     throw new Error("spreadsheetId를 입력해주세요.");
@@ -354,19 +411,23 @@ function setTargetSpreadsheetId(spreadsheetId) {
 
   return {
     ok: true,
+    authenticated: true,
     targetSpreadsheetId: normalized
   };
 }
 
-function clearTargetSpreadsheetId() {
+function clearTargetSpreadsheetId(sessionToken) {
+  requireScaleWebappSession_(sessionToken);
   PropertiesService.getScriptProperties().deleteProperty(SCALE_SYNC_CONFIG.propertyKeys.spreadsheetId);
   return {
     ok: true,
+    authenticated: true,
     targetSpreadsheetId: getTargetSpreadsheetId_()
   };
 }
 
-function setSyncToken(token) {
+function setSyncToken(sessionToken, token) {
+  requireScaleWebappSession_(sessionToken);
   const normalized = normalizeText_(token);
   if (!normalized) {
     throw new Error("token을 입력해주세요.");
@@ -379,36 +440,74 @@ function setSyncToken(token) {
 
   return {
     ok: true,
+    authenticated: true,
     tokenConfigured: true
   };
 }
 
-function clearSyncToken() {
+function clearSyncToken(sessionToken) {
+  requireScaleWebappSession_(sessionToken);
   PropertiesService.getScriptProperties().deleteProperty(SCALE_SYNC_CONFIG.propertyKeys.token);
   return {
     ok: true,
+    authenticated: true,
     tokenConfigured: false
   };
 }
 
-function getScaleSyncStatus() {
-  return buildStatusPayload_();
+function getScaleSyncStatus(sessionToken) {
+  const sessionContext = requireScaleWebappSession_(sessionToken);
+  return Object.assign({
+    ok: true,
+    authenticated: true
+  }, buildStatusPayload_(sessionContext));
 }
 
 function buildTemplateBootstrap_() {
+  return buildPublicBootstrap_();
+}
+
+function buildPublicBootstrap_() {
   return {
     ok: true,
+    authenticated: false,
+    sessionToken: "",
+    currentUser: {
+      email: "",
+      domain: "",
+      displayName: ""
+    },
     appName: SCALE_WEBAPP_CONFIG.appName,
     subtitle: SCALE_WEBAPP_CONFIG.subtitle,
     settings: structuredCloneSafe_(SCALE_WEBAPP_CONFIG.settings),
-    status: buildStatusPayload_()
+    loginHint: "허용된 계정으로 로그인해주세요.",
+    status: null
   };
 }
 
-function buildStatusPayload_() {
+function buildAuthenticatedBootstrap_(sessionContext) {
   return {
     ok: true,
-    currentUser: getCurrentUserContext_(),
+    authenticated: true,
+    sessionToken: sessionContext ? sessionContext.token : "",
+    currentUser: getCurrentUserContext_(sessionContext),
+    appName: SCALE_WEBAPP_CONFIG.appName,
+    subtitle: SCALE_WEBAPP_CONFIG.subtitle,
+    settings: structuredCloneSafe_(SCALE_WEBAPP_CONFIG.settings),
+    loginHint: "로그인 상태가 유지됩니다.",
+    status: buildStatusPayload_(sessionContext)
+  };
+}
+
+function buildBootstrapPayload_(sessionContext) {
+  return sessionContext ? buildAuthenticatedBootstrap_(sessionContext) : buildPublicBootstrap_();
+}
+
+function buildStatusPayload_(sessionContext) {
+  return {
+    ok: true,
+    authenticated: true,
+    currentUser: getCurrentUserContext_(sessionContext),
     targetSpreadsheetId: getTargetSpreadsheetId_(),
     targetSpreadsheetName: getTargetSpreadsheet_().getName(),
     tokenConfigured: Boolean(getSyncToken_()),
@@ -417,19 +516,18 @@ function buildStatusPayload_() {
   };
 }
 
-function getCurrentUserContext_() {
-  const activeEmail = normalizeText_(Session.getActiveUser().getEmail());
-  const effectiveEmail = normalizeText_(Session.getEffectiveUser().getEmail());
-  const email = activeEmail || effectiveEmail;
-
+function getCurrentUserContext_(sessionContext) {
+  const context = sessionContext && typeof sessionContext === "object" ? sessionContext : null;
   return {
-    email: email,
-    domain: email.indexOf("@") >= 0 ? email.split("@")[1] : "",
-    displayName: email || "조직 계정"
+    email: "",
+    domain: "",
+    displayName: context && context.displayName ? context.displayName : "",
+    username: context && context.username ? context.username : "",
+    role: context && context.role ? context.role : ""
   };
 }
 
-function normalizeRecord_(record) {
+function normalizeRecord_(record, sessionContext) {
   if (!record || typeof record !== "object") {
     throw new Error("저장할 검사 결과가 없습니다.");
   }
@@ -440,7 +538,7 @@ function normalizeRecord_(record) {
     throw new Error("척도 정보를 찾을 수 없습니다.");
   }
 
-  const currentUser = getCurrentUserContext_();
+  const currentUser = getCurrentUserContext_(sessionContext);
   const respondent = record.respondent && typeof record.respondent === "object"
     ? structuredCloneSafe_(record.respondent)
     : {};
@@ -641,12 +739,35 @@ function getQuestionnaireBundle_() {
   }
 
   const raw = getQuestionnaireBundleRaw_();
-  const jsonText = raw
-    .replace(/^\s*window\.__SCALE_SCREENING_BUNDLE__\s*=\s*/, "")
-    .replace(/;\s*$/, "");
+  const jsonText = extractQuestionnaireBundleJson_(raw);
 
   questionnaireBundleCache_ = JSON.parse(jsonText);
   return questionnaireBundleCache_;
+}
+
+function extractQuestionnaireBundleJson_(raw) {
+  const text = normalizeText_(raw);
+  if (!text) {
+    throw new Error("척도 번들이 비어 있습니다.");
+  }
+
+  const scriptMatch = text.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+  const body = scriptMatch ? scriptMatch[1] : text;
+  const assignmentMatch = body.match(/window\.__SCALE_SCREENING_BUNDLE__\s*=\s*([\s\S]*?);?\s*$/i);
+  const candidate = assignmentMatch ? assignmentMatch[1] : body;
+  const trimmed = candidate
+    .replace(/^\s*window\.__SCALE_SCREENING_BUNDLE__\s*=\s*/i, "")
+    .replace(/^\s*<script[^>]*>\s*/i, "")
+    .replace(/\s*<\/script>\s*$/i, "")
+    .replace(/;\s*$/,"")
+    .trim();
+
+  const objectMatch = trimmed.match(/\{[\s\S]*\}$/);
+  if (objectMatch) {
+    return objectMatch[0];
+  }
+
+  return trimmed;
 }
 
 function getQuestionnaireBundleRaw_() {
@@ -654,6 +775,221 @@ function getQuestionnaireBundleRaw_() {
     .getContent()
     .replace(/^\uFEFF/, "")
     .trim();
+}
+
+function authenticateScaleWebappUser_(username, password) {
+  const normalizedUsername = normalizeText_(username);
+  const normalizedPassword = normalizeText_(password);
+
+  if (!normalizedUsername || !normalizedPassword) {
+    throw new Error("아이디와 비밀번호를 입력해주세요.");
+  }
+
+  const accounts = ensureScaleWebappAccounts_();
+  const account = accounts[normalizedUsername];
+
+  if (!account || account.active === false || normalizeText_(account.password) !== normalizedPassword) {
+    throw new Error("로그인 정보를 확인해주세요.");
+  }
+
+  return normalizeScaleWebappAccount_(account, normalizedUsername);
+}
+
+function ensureScaleWebappAccounts_() {
+  const properties = PropertiesService.getScriptProperties();
+  const raw = normalizeText_(properties.getProperty(SCALE_AUTH_CONFIG.propertyKeys.accounts));
+  let accounts = {};
+
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        accounts = parsed;
+      }
+    } catch (error) {
+      accounts = {};
+    }
+  }
+
+  let changed = false;
+  SCALE_AUTH_CONFIG.defaultAccounts.forEach(function(seed) {
+    const key = normalizeText_(seed.username);
+    if (!key) {
+      return;
+    }
+
+    const normalized = normalizeScaleWebappAccount_(accounts[key] || seed, key);
+    if (JSON.stringify(accounts[key]) !== JSON.stringify(normalized)) {
+      accounts[key] = normalized;
+      changed = true;
+    }
+  });
+
+  if (!raw || changed) {
+    properties.setProperty(SCALE_AUTH_CONFIG.propertyKeys.accounts, JSON.stringify(accounts));
+  }
+
+  return accounts;
+}
+
+function normalizeScaleWebappAccount_(account, fallbackUsername) {
+  const source = account && typeof account === "object" ? account : {};
+  const username = normalizeText_(source.username || fallbackUsername);
+
+  return {
+    username: username,
+    password: normalizeText_(source.password),
+    displayName: normalizeText_(source.displayName) || username,
+    role: normalizeText_(source.role) || "user",
+    active: source.active !== false,
+    createdAt: normalizeText_(source.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeText_(source.updatedAt) || new Date().toISOString()
+  };
+}
+
+function getScaleWebappSessions_() {
+  const properties = PropertiesService.getScriptProperties();
+  const raw = normalizeText_(properties.getProperty(SCALE_AUTH_CONFIG.propertyKeys.sessions));
+
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveScaleWebappSessions_(sessions) {
+  const cleaned = pruneScaleWebappSessions_(sessions || {});
+  PropertiesService.getScriptProperties().setProperty(
+    SCALE_AUTH_CONFIG.propertyKeys.sessions,
+    JSON.stringify(cleaned)
+  );
+  return cleaned;
+}
+
+function pruneScaleWebappSessions_(sessions) {
+  const cleaned = {};
+  const now = Date.now();
+
+  Object.keys(sessions || {}).forEach(function(token) {
+    const session = sessions[token];
+    if (!session || typeof session !== "object") {
+      return;
+    }
+
+    const expiresAt = new Date(session.expiresAt || "").getTime();
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+      return;
+    }
+
+    cleaned[token] = session;
+  });
+
+  return cleaned;
+}
+
+function createScaleWebappSession_(account) {
+  const normalizedAccount = normalizeScaleWebappAccount_(account, account && account.username);
+  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + SCALE_AUTH_CONFIG.sessionTtlHours * 60 * 60 * 1000);
+  const session = {
+    token: token,
+    username: normalizedAccount.username,
+    displayName: normalizedAccount.displayName,
+    role: normalizedAccount.role,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString()
+  };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sessions = getScaleWebappSessions_();
+    sessions[token] = session;
+    saveScaleWebappSessions_(sessions);
+  } finally {
+    lock.releaseLock();
+  }
+
+  return session;
+}
+
+function invalidateScaleWebappSession_(sessionToken) {
+  const normalizedToken = normalizeText_(sessionToken);
+  if (!normalizedToken) {
+    return;
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sessions = getScaleWebappSessions_();
+    delete sessions[normalizedToken];
+    saveScaleWebappSessions_(sessions);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getSessionContext_(sessionToken) {
+  const normalizedToken = normalizeText_(sessionToken);
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const sessions = getScaleWebappSessions_();
+  const session = sessions[normalizedToken];
+  if (!session || typeof session !== "object") {
+    return null;
+  }
+
+  const expiresAt = new Date(session.expiresAt || "").getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    delete sessions[normalizedToken];
+    saveScaleWebappSessions_(sessions);
+    return null;
+  }
+
+  const accounts = ensureScaleWebappAccounts_();
+  const account = accounts[normalizeText_(session.username)];
+  if (!account || account.active === false) {
+    delete sessions[normalizedToken];
+    saveScaleWebappSessions_(sessions);
+    return null;
+  }
+
+  return {
+    token: normalizedToken,
+    username: account.username,
+    displayName: account.displayName || account.username,
+    role: account.role || "user"
+  };
+}
+
+function requireScaleWebappSession_(sessionToken) {
+  const normalizedToken = normalizeText_(sessionToken);
+  const sessionContext = getSessionContext_(normalizedToken);
+  if (!sessionContext) {
+    throw new Error(normalizedToken ? "세션이 만료되었습니다. 다시 로그인해주세요." : "로그인이 필요합니다.");
+  }
+  return sessionContext;
+}
+
+function pickPublicUserContext_(sessionContext) {
+  const context = sessionContext && typeof sessionContext === "object" ? sessionContext : {};
+  return {
+    email: "",
+    domain: "",
+    displayName: normalizeText_(context.displayName),
+    username: normalizeText_(context.username),
+    role: normalizeText_(context.role)
+  };
 }
 
 function parsePayload_(e) {
@@ -1363,3 +1699,4 @@ function mergeCounts_(target, partial) {
     }
   });
 }
+
