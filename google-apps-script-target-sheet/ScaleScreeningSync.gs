@@ -349,6 +349,7 @@ function doPost(e) {
     validateScaleScreeningSyncToken_(payload.token);
 
     const result = upsertScaleScreeningPayload_(payload);
+    applyScaleScreeningDisplayFormats_();
     invalidateScaleScreeningSyncCache_();
     return createScaleScreeningJsonOutput_({
       ok: true,
@@ -382,6 +383,8 @@ function doPost(e) {
 }
 
 function buildScaleScreeningSyncStatus_() {
+  applyScaleScreeningDisplayFormats_();
+
   const spreadsheet = getScaleScreeningTargetSpreadsheet_();
   const recordSheetName = getScaleScreeningRecordSheetName_();
   const answerSheetName = getScaleScreeningAnswerSheetName_();
@@ -625,6 +628,9 @@ function normalizeScaleSearchDate_(value) {
   if (!text) {
     return "";
   }
+  if (/^\d{5}(?:\.\d+)?$/.test(text)) {
+    return convertScaleSerialDateToText_(Number(text));
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
     return text;
   }
@@ -635,6 +641,21 @@ function normalizeScaleSearchDate_(value) {
   }
 
   return text.slice(0, 10);
+}
+
+function convertScaleSerialDateToText_(serialValue) {
+  const serial = Number(serialValue);
+  if (!isFinite(serial)) {
+    return "";
+  }
+
+  const milliseconds = Math.round((serial - 25569) * 86400 * 1000);
+  const date = new Date(milliseconds);
+  if (isNaN(date.getTime())) {
+    return "";
+  }
+
+  return Utilities.formatDate(date, "Asia/Seoul", "yyyy-MM-dd");
 }
 
 function parseScaleNumericValue_(value) {
@@ -1391,6 +1412,27 @@ function formatScaleScreeningSyncSheet_(sheet, columnCount) {
   sheet.setFrozenRows(1);
   styleHeaderRow_(sheet, 1, columnCount);
   sheet.autoResizeColumns(1, Math.min(columnCount, sheet.getMaxColumns()));
+}
+
+function applyScaleScreeningDisplayFormats_() {
+  const formatTargets = [
+    { name: getScaleScreeningRecordSheetName_(), formats: { "H:H": "yyyy-mm-dd hh:mm", "I:I": "yyyy-mm-dd", "Q:Q": "yyyy-mm-dd" } },
+    { name: getScaleScreeningAnswerSheetName_(), formats: { "C:C": "yyyy-mm-dd hh:mm", "D:D": "yyyy-mm-dd", "I:I": "yyyy-mm-dd" } },
+    { name: getScaleScreeningWorkerViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd" } },
+    { name: getScaleScreeningRiskViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd" } },
+    { name: getScaleScreeningDashboardSheetName_(), formats: { "A:A": "yyyy-mm-dd", "E3": "yyyy-mm-dd" } }
+  ];
+
+  formatTargets.forEach(function(target) {
+    const sheet = getScaleScreeningSheetIfExists_(target.name);
+    if (!sheet) {
+      return;
+    }
+
+    Object.keys(target.formats).forEach(function(rangeA1) {
+      sheet.getRange(rangeA1).setNumberFormat(target.formats[rangeA1]);
+    });
+  });
 }
 
 function getScaleScreeningSyncToken_() {
