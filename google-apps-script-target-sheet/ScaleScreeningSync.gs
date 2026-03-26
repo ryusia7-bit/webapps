@@ -13,7 +13,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     settingsSheetName: "scale_screening_settings_sheet_name"
   },
   defaults: {
-    targetSpreadsheetId: "129w-AhjiLg2fxGqssFeC4vcQJv9hG89M4SAxXXEKrCU",
+    targetSpreadsheetId: "11y5p7Cp_yN2vggMOlCwn4pKNBEmio-CmkK25Nyd2nIk",
     recordSheetName: "척도검사기록",
     answerSheetName: "척도문항응답",
     questionnaireSheetName: "척도마스터",
@@ -169,6 +169,8 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
+const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
+
 function setupScaleScreeningSyncSheets() {
   setScaleScreeningTargetToCurrentSpreadsheet_(false);
 
@@ -310,8 +312,29 @@ function showScaleScreeningSyncStatus() {
   );
 }
 
-function doGet() {
-  return createScaleScreeningJsonOutput_(buildScaleScreeningSyncStatus_());
+function doGet(e) {
+  const params = (e && e.parameter) || {};
+  const callbackName = params.callback;
+  const action = normalizeText_(params.action).toLowerCase();
+
+  try {
+    validateScaleScreeningSyncToken_(params.token);
+
+    if (action === "searchrecords" || action === "search_records" || action === "search") {
+      return createScaleScreeningJsonOutput_(searchScaleScreeningRecords_(params), callbackName);
+    }
+
+    return createScaleScreeningJsonOutput_(getCachedScaleScreeningSyncStatus_(), callbackName);
+  } catch (error) {
+    console.error("척도검사 GET 요청 처리 실패:", {
+      action: action || "status",
+      message: error.message
+    });
+    return createScaleScreeningJsonOutput_({
+      ok: false,
+      error: error.message
+    }, callbackName);
+  }
 }
 
 function doPost(e) {
@@ -326,6 +349,7 @@ function doPost(e) {
     validateScaleScreeningSyncToken_(payload.token);
 
     const result = upsertScaleScreeningPayload_(payload);
+    invalidateScaleScreeningSyncCache_();
     return createScaleScreeningJsonOutput_({
       ok: true,
       recordSheetName: result.recordSheetName,
@@ -398,6 +422,237 @@ function buildScaleScreeningSyncStatus_() {
     workerViewRowCount: Math.max((workerViewSheet && workerViewSheet.getLastRow()) || 0, 1) - 1,
     riskViewRowCount: Math.max((riskViewSheet && riskViewSheet.getLastRow()) || 0, 1) - 1
   };
+}
+
+function getCachedScaleScreeningSyncStatus_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(SCALE_SCREENING_STATUS_CACHE_KEY);
+
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (error) {
+      cache.remove(SCALE_SCREENING_STATUS_CACHE_KEY);
+    }
+  }
+
+  const status = buildScaleScreeningSyncStatus_();
+  cache.put(SCALE_SCREENING_STATUS_CACHE_KEY, JSON.stringify(status), 60);
+  return status;
+}
+
+function invalidateScaleScreeningSyncCache_() {
+  CacheService.getScriptCache().remove(SCALE_SCREENING_STATUS_CACHE_KEY);
+}
+
+/**
+ * 척도검사 기록 시트에서 대상자 기준 검색 결과를 반환합니다.
+ *
+ * @param {{name?: string, birthDate?: string, questionnaireId?: string, limit?: string}} params 조회 파라미터
+ * @returns {{ok: boolean, query: object, recordCount: number, records: object[]}}
+ */
+function searchScaleScreeningRecords_(params) {
+  console.time("searchScaleScreeningRecords");
+
+  try {
+    const nameQuery = normalizeScaleLookupText_(params.name);
+    const birthDateQuery = normalizeScaleSearchDate_(params.birthDate);
+    const questionnaireIdQuery = normalizeScaleLookupText_(params.questionnaireId);
+    const limit = Math.min(Math.max(parseInt(params.limit, 10) || 200, 1), 500);
+
+    if (!nameQuery && !birthDateQuery) {
+      throw new Error("대상자 이름 또는 생년월일을 입력해주세요.");
+    }
+
+    const recordSheet = getScaleScreeningSheetIfExists_(getScaleScreeningRecordSheetName_());
+    if (!recordSheet || recordSheet.getLastRow() < 2) {
+      return {
+        ok: true,
+        query: {
+          name: normalizeText_(params.name),
+          birthDate: birthDateQuery,
+          questionnaireId: normalizeText_(params.questionnaireId)
+        },
+        recordCount: 0,
+        records: []
+      };
+    }
+
+    const values = recordSheet.getRange(1, 1, recordSheet.getLastRow(), recordSheet.getLastColumn()).getDisplayValues();
+    const headerIndexMap = buildScaleHeaderIndexMap_(values[0]);
+    const matchedRecords = [];
+
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex += 1) {
+      const row = values[rowIndex];
+      const clientLabel = normalizeScaleLookupText_(row[headerIndexMap.client_label]);
+      const birthDate = normalizeScaleSearchDate_(row[headerIndexMap.birth_date]);
+      const questionnaireId = normalizeScaleLookupText_(row[headerIndexMap.questionnaire_id]);
+
+      if (nameQuery && clientLabel !== nameQuery) {
+        continue;
+      }
+      if (birthDateQuery && birthDate !== birthDateQuery) {
+        continue;
+      }
+      if (questionnaireIdQuery && questionnaireId !== questionnaireIdQuery) {
+        continue;
+      }
+
+      const parsedRecord = parseScaleScreeningSearchRecord_(row, headerIndexMap);
+      if (parsedRecord) {
+        matchedRecords.push(parsedRecord);
+      }
+    }
+
+    matchedRecords.sort(function(a, b) {
+      return getScaleSortDateValue_(a).localeCompare(getScaleSortDateValue_(b));
+    });
+
+    const limitedRecords = matchedRecords.length > limit
+      ? matchedRecords.slice(matchedRecords.length - limit)
+      : matchedRecords;
+
+    return {
+      ok: true,
+      query: {
+        name: normalizeText_(params.name),
+        birthDate: birthDateQuery,
+        questionnaireId: normalizeText_(params.questionnaireId)
+      },
+      recordCount: limitedRecords.length,
+      records: limitedRecords
+    };
+  } finally {
+    console.timeEnd("searchScaleScreeningRecords");
+  }
+}
+
+function buildScaleHeaderIndexMap_(headers) {
+  return (headers || []).reduce(function(result, header, index) {
+    const key = normalizeText_(header);
+    if (key) {
+      result[key] = index;
+    }
+    return result;
+  }, {});
+}
+
+function parseScaleScreeningSearchRecord_(row, headerIndexMap) {
+  const recordId = normalizeText_(row[headerIndexMap.record_id]);
+  if (!recordId) {
+    return null;
+  }
+
+  const parsedRecord = safeParseScaleJson_(row[headerIndexMap.record_json]) || {};
+  const rawEvaluation = parsedRecord.evaluation || {};
+  const rawMeta = parsedRecord.meta || {};
+  const rawFlags = Array.isArray(rawEvaluation.flags) ? rawEvaluation.flags : [];
+  const normalizedScore = rawEvaluation.normalizedScore !== null && rawEvaluation.normalizedScore !== undefined
+    ? Number(rawEvaluation.normalizedScore)
+    : parseScaleNumericValue_(row[headerIndexMap.score_text]);
+
+  return {
+    id: recordId,
+    questionnaireId: normalizeText_(row[headerIndexMap.questionnaire_id]),
+    questionnaireTitle: normalizeText_(row[headerIndexMap.questionnaire_title]),
+    shortTitle: normalizeText_(row[headerIndexMap.questionnaire_short_title]),
+    createdAt: normalizeText_(parsedRecord.createdAt) || normalizeText_(row[headerIndexMap.record_created_at]),
+    meta: {
+      sessionDate: normalizeScaleSearchDate_(row[headerIndexMap.session_date]),
+      workerName: normalizeText_(row[headerIndexMap.worker_name]) || normalizeText_(rawMeta.workerName),
+      clientLabel: normalizeText_(row[headerIndexMap.client_label]) || normalizeText_(rawMeta.clientLabel),
+      birthDate: normalizeScaleSearchDate_(row[headerIndexMap.birth_date]) || normalizeScaleSearchDate_(rawMeta.birthDate),
+      sessionNote: normalizeText_(row[headerIndexMap.session_note]) || normalizeText_(rawMeta.sessionNote)
+    },
+    progress: {
+      percent: parseScaleNumericValue_(row[headerIndexMap.progress_percent]),
+      answered: parseScaleNumericValue_(row[headerIndexMap.progress_answered]),
+      total: parseScaleNumericValue_(row[headerIndexMap.progress_total]),
+      summary: normalizeText_(row[headerIndexMap.progress_summary])
+    },
+    evaluation: {
+      score: rawEvaluation.score !== null && rawEvaluation.score !== undefined
+        ? Number(rawEvaluation.score)
+        : parseScaleNumericValue_(row[headerIndexMap.score_text]),
+      maxScore: rawEvaluation.maxScore !== null && rawEvaluation.maxScore !== undefined
+        ? Number(rawEvaluation.maxScore)
+        : null,
+      normalizedScore: Number.isFinite(normalizedScore) ? normalizedScore : 0,
+      scoreText: normalizeText_(row[headerIndexMap.score_text]) || normalizeText_(rawEvaluation.scoreText),
+      bandText: normalizeText_(row[headerIndexMap.band_text]) || normalizeText_(rawEvaluation.bandText),
+      highlights: Array.isArray(rawEvaluation.highlights) ? rawEvaluation.highlights : [],
+      flags: rawFlags.length
+        ? rawFlags.map(function(flag) {
+          return {
+            level: normalizeText_(flag && flag.level) || "warn",
+            text: normalizeText_(flag && flag.text)
+          };
+        }).filter(function(flag) {
+          return flag.text;
+        })
+        : normalizeText_(row[headerIndexMap.flags])
+            .split("|")
+            .map(function(text) {
+              return normalizeText_(text);
+            })
+            .filter(Boolean)
+            .map(function(text) {
+              return { level: "warn", text: text };
+            })
+    }
+  };
+}
+
+function safeParseScaleJson_(value) {
+  const text = normalizeText_(value);
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeScaleLookupText_(value) {
+  return normalizeText_(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeScaleSearchDate_(value) {
+  const text = normalizeText_(value);
+  if (!text) {
+    return "";
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const parsed = new Date(text);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, "Asia/Seoul", "yyyy-MM-dd");
+  }
+
+  return text.slice(0, 10);
+}
+
+function parseScaleNumericValue_(value) {
+  const text = normalizeText_(value);
+  if (!text) {
+    return null;
+  }
+
+  const matched = text.match(/-?\d+(?:\.\d+)?/);
+  return matched ? Number(matched[0]) : null;
+}
+
+function getScaleSortDateValue_(record) {
+  return normalizeText_(
+    record &&
+    record.meta &&
+    record.meta.sessionDate
+  ) || normalizeText_(record && record.createdAt);
 }
 
 function parseScaleScreeningSyncPayload_(e) {
@@ -1058,7 +1313,9 @@ function ensureScaleScreeningSyncSheet_(sheetName, headers) {
       return normalizeText_(value);
     });
     if (currentHeaders.join("||") !== normalizedHeaders.join("||")) {
-      throw new Error("'" + sheetName + "' 시트의 헤더가 예상 형식과 다릅니다.");
+      console.warn("'" + sheetName + "' 시트 헤더를 최신 구조로 자동 보정합니다.");
+      ensureSheetSize_(sheet, Math.max(sheet.getMaxRows(), 2), normalizedHeaders.length);
+      sheet.getRange(1, 1, 1, normalizedHeaders.length).setValues([normalizedHeaders]);
     }
   }
 
@@ -1196,10 +1453,28 @@ function getScaleScreeningSettingsSheetName_() {
   )) || SCALE_SCREENING_SYNC_CONFIG.defaults.settingsSheetName;
 }
 
-function createScaleScreeningJsonOutput_(data) {
+function createScaleScreeningJsonOutput_(data, callbackName) {
+  const body = JSON.stringify(data);
+  const normalizedCallback = normalizeScaleJsonpCallback_(callbackName);
+
+  if (normalizedCallback) {
+    return ContentService
+      .createTextOutput(normalizedCallback + "(" + body + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
   return ContentService
-    .createTextOutput(JSON.stringify(data, null, 2))
+    .createTextOutput(body)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function normalizeScaleJsonpCallback_(callbackName) {
+  const text = normalizeText_(callbackName);
+  if (!text) {
+    return "";
+  }
+
+  return /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(text) ? text : "";
 }
 
 function findDisplayValueByLabel_(items, label) {

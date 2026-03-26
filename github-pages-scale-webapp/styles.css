@@ -113,6 +113,16 @@ button {
   line-height: 1.65;
 }
 
+.muted.success {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.muted.error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .card {
   padding: 22px;
   background: var(--panel);

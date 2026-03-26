@@ -27,8 +27,8 @@
           <p class="eyebrow">MindMap 다시서기</p>
           <h1>노숙인 정신건강 척도관리 웹앱</h1>
           <p class="hero-text">
-            공개 배포용 정적 웹앱입니다. 검사 결과는 현재 브라우저에 저장되며, 대상자 이름과 검사일을 기준으로
-            결과 비교와 변화 추적을 할 수 있습니다.
+            공개 배포용 정적 웹앱입니다. 검사 결과를 현재 브라우저에 저장하고, 구글 시트 DB에도 함께 전송해
+            대상자별 변화 추이와 척도별 점수 흐름을 비교할 수 있습니다.
           </p>
         </div>
         <div class="hero-summary card">
@@ -71,8 +71,8 @@
           <div class="sidebar-note">
             <p class="section-label">운영 메모</p>
             <p>
-              이 버전은 GitHub Pages 공개 배포용입니다. 공동 사용 기록 저장이 필요하면 이후 별도 백엔드나 구글 시트
-              연동을 붙이는 방식으로 확장할 수 있습니다.
+              이 버전은 GitHub Pages 공개 배포용입니다. 결과는 현재 브라우저에 저장되며, 구글 시트 연동 주소를
+              설정하면 검사 결과와 척도 마스터를 시트 DB로 함께 보낼 수 있습니다.
             </p>
           </div>
         </aside>
@@ -222,7 +222,7 @@
                 </section>
 
                 <div class="action-row">
-                  <button id="saveResultBtn" class="btn btn-primary" type="button">이 기기에 저장</button>
+                  <button id="saveResultBtn" class="btn btn-primary" type="button">저장 (기기+시트)</button>
                   <button id="printBtn" class="btn btn-secondary" type="button">인쇄</button>
                   <button id="exportCurrentBtn" class="btn btn-secondary" type="button">결과 파일 저장</button>
                 </div>
@@ -240,6 +240,7 @@
                 <div class="inline-actions">
                   <button id="exportAllJsonBtn" class="btn btn-secondary" type="button">전체 JSON 저장</button>
                   <button id="exportAllCsvBtn" class="btn btn-secondary" type="button">전체 CSV 저장</button>
+                  <button id="syncAllRecordsBtn" class="btn btn-secondary" type="button">전체 시트 전송</button>
                   <button id="importJsonBtn" class="btn btn-secondary" type="button">기록 불러오기</button>
                   <button id="clearAllBtn" class="btn btn-danger" type="button">전체 삭제</button>
                   <input id="importJsonInput" class="hidden" type="file" accept=".json,application/json" />
@@ -290,8 +291,12 @@
                   <p class="section-label">대상자 비교 분석</p>
                   <h3>변화 대시보드</h3>
                 </div>
-                <p class="muted">대상자 이름과 생년월일을 기준으로 검사 이력을 묶어서 확인합니다.</p>
+                <div class="inline-actions">
+                  <button id="dashboardRefreshBtn" class="btn btn-secondary" type="button">구글 시트 DB 조회</button>
+                </div>
               </div>
+
+              <p class="muted">대상자 이름과 생년월일을 기준으로 검사 이력을 묶어서 확인합니다.</p>
 
               <div class="filter-grid">
                 <label class="text-field">
@@ -311,6 +316,10 @@
               </div>
 
               <datalist id="dashboardSubjectSuggestions"></datalist>
+
+              <p id="dashboardStatusText" class="muted">
+                현재 브라우저 저장 결과를 먼저 표시합니다. 구글 시트 DB 조회 버튼을 누르면 누적 DB 기록까지 함께 불러옵니다.
+              </p>
 
               <div class="dashboard-summary" id="dashboardSummary"></div>
 
@@ -344,6 +353,44 @@
             <article class="card">
               <div class="section-head">
                 <div>
+                  <p class="section-label">구글 시트 DB 연동</p>
+                  <h3>저장 및 조회 연결 설정</h3>
+                </div>
+              </div>
+
+              <div class="filter-grid">
+                <label class="text-field">
+                  <span class="text-label">구글 연동 주소</span>
+                  <input id="googleSyncUrl" type="url" maxlength="300" placeholder="배포된 Apps Script 웹앱 주소" autocomplete="off" />
+                </label>
+                <label class="text-field">
+                  <span class="text-label">동기화 토큰(선택)</span>
+                  <input id="googleSyncToken" type="password" maxlength="120" placeholder="비워두면 토큰 없이 전송" autocomplete="off" />
+                </label>
+              </div>
+
+              <div class="inline-actions">
+                <button id="syncCurrentBtn" class="btn btn-secondary" type="button">현재 결과 전송</button>
+                <button id="syncHistoryBtn" class="btn btn-secondary" type="button">저장 결과 전체 전송</button>
+                <button id="syncQuestionnairesBtn" class="btn btn-secondary" type="button">척도 마스터 전송</button>
+                <button id="checkSyncStatusBtn" class="btn btn-secondary" type="button">연동 상태 확인</button>
+              </div>
+
+              <p id="syncStatusText" class="muted">
+                아직 구글 시트 전송을 실행하지 않았습니다.
+              </p>
+
+              <div class="deploy-box">
+                <p><strong>연동 동작 방식</strong></p>
+                <ul class="bullet-list">
+                  <li>검사 결과 저장 시 현재 브라우저 저장과 구글 시트 DB 전송을 함께 시도합니다.</li>
+                  <li>대시보드에서는 이름과 생년월일 기준으로 구글 시트 DB를 조회해 그래프를 갱신합니다.</li>
+                  <li>척도 마스터 전송은 문항 정의와 선택지 구조를 시트에 맞춰 갱신합니다.</li>
+                </ul>
+              </div>
+
+              <div class="section-head">
+                <div>
                   <p class="section-label">GitHub Pages</p>
                   <h3>공개 배포 안내</h3>
                 </div>
@@ -353,7 +400,7 @@
                 <li>이 폴더 `github-pages-scale-webapp`를 GitHub Pages 배포 대상으로 사용합니다.</li>
                 <li>저장소 루트의 `.github/workflows/deploy-pages.yml`이 `main` 브랜치 푸시 때 자동 배포합니다.</li>
                 <li>GitHub 저장소 설정의 `Pages`에서 Source를 `GitHub Actions`로 지정하면 공개 주소가 활성화됩니다.</li>
-                <li>이 앱은 서버 없이 브라우저 로컬 저장을 사용하므로, 공동 저장이 필요하면 이후 별도 백엔드 연동이 필요합니다.</li>
+                <li>공동 저장과 비교 분석은 구글 시트 DB 웹앱을 연결해 확장합니다.</li>
               </ol>
 
               <div class="deploy-box">

@@ -3,9 +3,12 @@
 
   const ORG_NAME = "다시서기종합지원센터";
   const TEAM_NAME = "정신건강팀";
+  const DEFAULT_GOOGLE_SYNC_URL =
+    "https://script.google.com/macros/s/AKfycbywbENzL--pd_pLcmJPzWvAKOhzM7SwAkL38Zd7aNldafguQO85N_U2k0v5baUxhr4E/exec";
   const STORAGE_KEYS = {
     records: "mindmap_scale_records_v1",
-    worker: "mindmap_scale_worker_v1"
+    worker: "mindmap_scale_worker_v1",
+    googleSync: "mindmap_scale_google_sync_v1"
   };
   const SCALE_COLORS = [
     "#126b57",
@@ -27,7 +30,12 @@
     activeView: "screening",
     lastResult: null,
     records: [],
-    chart: null
+    chart: null,
+    remoteDashboardRecords: [],
+    syncSettings: {
+      webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
+      syncToken: ""
+    }
   };
 
   const ui = {};
@@ -39,6 +47,7 @@
     bindEvents();
     loadBundle();
     loadSavedRecords();
+    loadSyncSettings();
     restoreWorkerName();
     if (!ui.sessionDate.value) {
       ui.sessionDate.value = new Date().toISOString().slice(0, 10);
@@ -103,6 +112,7 @@
     ui.recordsEmpty = document.getElementById("recordsEmpty");
     ui.exportAllJsonBtn = document.getElementById("exportAllJsonBtn");
     ui.exportAllCsvBtn = document.getElementById("exportAllCsvBtn");
+    ui.syncAllRecordsBtn = document.getElementById("syncAllRecordsBtn");
     ui.importJsonBtn = document.getElementById("importJsonBtn");
     ui.importJsonInput = document.getElementById("importJsonInput");
     ui.clearAllBtn = document.getElementById("clearAllBtn");
@@ -110,10 +120,19 @@
     ui.dashboardBirthInput = document.getElementById("dashboardBirthInput");
     ui.dashboardScaleFilter = document.getElementById("dashboardScaleFilter");
     ui.dashboardSubjectSuggestions = document.getElementById("dashboardSubjectSuggestions");
+    ui.dashboardRefreshBtn = document.getElementById("dashboardRefreshBtn");
+    ui.dashboardStatusText = document.getElementById("dashboardStatusText");
     ui.dashboardSummary = document.getElementById("dashboardSummary");
     ui.dashboardChart = document.getElementById("dashboardChart");
     ui.dashboardTableBody = document.getElementById("dashboardTableBody");
     ui.dashboardEmpty = document.getElementById("dashboardEmpty");
+    ui.googleSyncUrl = document.getElementById("googleSyncUrl");
+    ui.googleSyncToken = document.getElementById("googleSyncToken");
+    ui.syncCurrentBtn = document.getElementById("syncCurrentBtn");
+    ui.syncHistoryBtn = document.getElementById("syncHistoryBtn");
+    ui.syncQuestionnairesBtn = document.getElementById("syncQuestionnairesBtn");
+    ui.checkSyncStatusBtn = document.getElementById("checkSyncStatusBtn");
+    ui.syncStatusText = document.getElementById("syncStatusText");
   }
 
   function bindEvents() {
@@ -142,12 +161,20 @@
     ui.recordsTableBody.addEventListener("click", onRecordsTableClick);
     ui.exportAllJsonBtn.addEventListener("click", exportAllRecordsAsJson);
     ui.exportAllCsvBtn.addEventListener("click", exportAllRecordsAsCsv);
+    ui.syncAllRecordsBtn.addEventListener("click", onSyncAllRecords);
     ui.importJsonBtn.addEventListener("click", () => ui.importJsonInput.click());
     ui.importJsonInput.addEventListener("change", onImportJson);
     ui.clearAllBtn.addEventListener("click", onClearAllRecords);
-    ui.dashboardNameInput.addEventListener("input", renderDashboard);
-    ui.dashboardBirthInput.addEventListener("change", renderDashboard);
-    ui.dashboardScaleFilter.addEventListener("change", renderDashboard);
+    ui.dashboardNameInput.addEventListener("input", onDashboardCriteriaChanged);
+    ui.dashboardBirthInput.addEventListener("change", onDashboardCriteriaChanged);
+    ui.dashboardScaleFilter.addEventListener("change", onDashboardCriteriaChanged);
+    ui.dashboardRefreshBtn.addEventListener("click", onDashboardRefresh);
+    ui.googleSyncUrl.addEventListener("input", onGoogleSyncSettingsInput);
+    ui.googleSyncToken.addEventListener("input", onGoogleSyncSettingsInput);
+    ui.syncCurrentBtn.addEventListener("click", onSyncCurrentResult);
+    ui.syncHistoryBtn.addEventListener("click", onSyncAllRecords);
+    ui.syncQuestionnairesBtn.addEventListener("click", onSyncQuestionnaires);
+    ui.checkSyncStatusBtn.addEventListener("click", onCheckSyncStatus);
   }
 
   function loadBundle() {
@@ -186,6 +213,141 @@
 
   function restoreWorkerName() {
     ui.workerName.value = localStorage.getItem(STORAGE_KEYS.worker) || "";
+  }
+
+  function loadSyncSettings() {
+    state.syncSettings = loadStoredSyncSettings();
+    ui.googleSyncUrl.value = state.syncSettings.webAppUrl || "";
+    ui.googleSyncToken.value = state.syncSettings.syncToken || "";
+    setSyncStatus(state.syncSettings.webAppUrl ? "구글 시트 연동 주소가 설정되었습니다." : "구글 시트 연동 주소를 아직 입력하지 않았습니다.");
+  }
+
+  function loadStoredSyncSettings() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.googleSync) || "{}");
+      return {
+        webAppUrl: normalizeGoogleSyncUrl(parsed.webAppUrl || DEFAULT_GOOGLE_SYNC_URL),
+        syncToken: typeof parsed.syncToken === "string" ? parsed.syncToken : ""
+      };
+    } catch (error) {
+      console.warn("구글 시트 연동 설정을 읽지 못했습니다.", error);
+      return {
+        webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
+        syncToken: ""
+      };
+    }
+  }
+
+  function onGoogleSyncSettingsInput() {
+    state.syncSettings = {
+      webAppUrl: normalizeGoogleSyncUrl(ui.googleSyncUrl.value),
+      syncToken: ui.googleSyncToken.value.trim()
+    };
+    localStorage.setItem(STORAGE_KEYS.googleSync, JSON.stringify(state.syncSettings));
+
+    if (!state.syncSettings.webAppUrl) {
+      setSyncStatus("구글 시트 연동 주소를 입력하면 저장 결과를 DB로 함께 보낼 수 있습니다.");
+      return;
+    }
+
+    if (!isValidGoogleSyncUrlFormat(state.syncSettings.webAppUrl)) {
+      setSyncStatus("구글 연동 주소 형식이 올바르지 않습니다.", "error");
+      return;
+    }
+
+    setSyncStatus("연동 설정을 저장했습니다.");
+  }
+
+  function normalizeGoogleSyncUrl(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (!normalized) {
+      return "";
+    }
+
+    if (isValidGoogleSyncUrlFormat(normalized)) {
+      return normalized;
+    }
+
+    if (
+      /^https:\/\/docs\.google\.com\/spreadsheets\//i.test(normalized) ||
+      /^https:\/\/script\.google\.com\/.*\/edit(?:[?#].*)?$/i.test(normalized) ||
+      /^https:\/\/script\.google\.com\/u\/\d+\/home\/projects\//i.test(normalized)
+    ) {
+      return "";
+    }
+
+    return normalized;
+  }
+
+  function isValidGoogleSyncUrlFormat(url) {
+    return /^https:\/\/script\.google\.com\/(?:macros\/s\/[A-Za-z0-9_-]+(?:\/(?:exec|dev))?|a\/macros\/[^/]+\/s\/[A-Za-z0-9_-]+(?:\/(?:exec|dev))?)(?:[/?#].*)?$/i.test(url || "");
+  }
+
+  function normalizeLookupText(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  }
+
+  function compareRecordDate(record) {
+    return String(record?.meta?.sessionDate || record?.createdAt || "");
+  }
+
+  function validateGoogleSyncSettings(settings) {
+    if (!settings?.webAppUrl) {
+      return {
+        ok: false,
+        message: "구글 연동 주소를 먼저 입력해주세요.",
+        focusTarget: ui.googleSyncUrl
+      };
+    }
+
+    if (!isValidGoogleSyncUrlFormat(settings.webAppUrl)) {
+      return {
+        ok: false,
+        message: "구글 연동 주소 형식이 올바르지 않습니다. 배포된 Apps Script 웹앱 주소를 사용해주세요.",
+        focusTarget: ui.googleSyncUrl
+      };
+    }
+
+    return { ok: true };
+  }
+
+  function setSyncStatus(message, type = "") {
+    ui.syncStatusText.textContent = message;
+    ui.syncStatusText.classList.remove("success", "error");
+    if (type) {
+      ui.syncStatusText.classList.add(type);
+    }
+  }
+
+  function setDashboardStatus(message, type = "") {
+    ui.dashboardStatusText.textContent = message;
+    ui.dashboardStatusText.classList.remove("success", "error");
+    if (type) {
+      ui.dashboardStatusText.classList.add(type);
+    }
+  }
+
+  function setSyncBusy(isBusy, message = "") {
+    [
+      ui.saveResultBtn,
+      ui.syncAllRecordsBtn,
+      ui.syncCurrentBtn,
+      ui.syncHistoryBtn,
+      ui.syncQuestionnairesBtn,
+      ui.checkSyncStatusBtn,
+      ui.dashboardRefreshBtn
+    ].forEach((button) => {
+      if (button) {
+        button.disabled = isBusy;
+      }
+    });
+
+    if (message) {
+      setSyncStatus(message, isBusy ? "" : "success");
+    }
   }
 
   function renderScaleFilters() {
@@ -914,20 +1076,35 @@
     ui.resultNotes.innerHTML = "";
   }
 
-  function onSaveResult() {
+  async function onSaveResult() {
     if (!state.lastResult) {
       alert("먼저 결과를 계산해주세요.");
       return;
     }
 
-    const existingIndex = state.records.findIndex((entry) => entry.id === state.lastResult.id);
+    saveRecordToDevice(state.lastResult);
+    let remoteMessage = "";
+
+    if (state.syncSettings.webAppUrl) {
+      const synced = await syncSingleRecordToGoogleSheets(state.lastResult, "current_result", false);
+      remoteMessage = synced ? " 구글 시트 DB에도 전송했습니다." : " 구글 시트 DB 전송은 실패했습니다.";
+    }
+
+    setActiveView("records");
+    setHeroStatus(`${state.lastResult.meta?.clientLabel || "대상자"} 결과를 저장했습니다.${remoteMessage}`);
+  }
+
+  function saveRecordToDevice(record) {
+    if (!record) {
+      return;
+    }
+
+    const existingIndex = state.records.findIndex((entry) => entry.id === record.id);
     if (existingIndex >= 0) {
       state.records.splice(existingIndex, 1);
     }
-    state.records.unshift(structuredCloneSafe(state.lastResult));
+    state.records.unshift(structuredCloneSafe(record));
     persistRecords();
-    setActiveView("records");
-    setHeroStatus(`${state.lastResult.meta?.clientLabel || "대상자"} 결과를 이 기기에 저장했습니다.`);
   }
 
   function onExportCurrentRecord() {
@@ -960,6 +1137,7 @@
             <button class="table-action" type="button" data-action="view" data-id="${escapeHtml(record.id)}">보기</button>
             <button class="table-action" type="button" data-action="load" data-id="${escapeHtml(record.id)}">불러오기</button>
             <button class="table-action" type="button" data-action="compare" data-id="${escapeHtml(record.id)}">비교</button>
+            <button class="table-action" type="button" data-action="sync" data-id="${escapeHtml(record.id)}">시트전송</button>
             <button class="table-action" type="button" data-action="export" data-id="${escapeHtml(record.id)}">파일</button>
             <button class="table-action danger" type="button" data-action="delete" data-id="${escapeHtml(record.id)}">삭제</button>
           </div>
@@ -993,7 +1171,7 @@
     });
   }
 
-  function onRecordsTableClick(event) {
+  async function onRecordsTableClick(event) {
     const button = event.target.closest("[data-action][data-id]");
     if (!button) {
       return;
@@ -1018,9 +1196,13 @@
         ui.dashboardScaleFilter.value = record.questionnaireId || "";
         renderDashboard();
         setActiveView("dashboard");
+        await refreshDashboardRemoteRecords(true);
         break;
       case "export":
         exportRecordAsJson(record);
+        break;
+      case "sync":
+        await syncSingleRecordToGoogleSheets(record, "saved_record", true);
         break;
       case "delete":
         if (!confirm("이 저장 결과를 삭제할까요?")) {
@@ -1155,9 +1337,269 @@
     setHeroStatus("현재 브라우저 저장 결과를 모두 삭제했습니다.");
   }
 
+  async function onSyncCurrentResult() {
+    if (!state.lastResult) {
+      alert("먼저 결과를 계산해주세요.");
+      return;
+    }
+    await syncSingleRecordToGoogleSheets(state.lastResult, "current_result", true);
+  }
+
+  async function onSyncAllRecords() {
+    if (!state.records.length) {
+      alert("전송할 저장 결과가 없습니다.");
+      return;
+    }
+
+    await sendRecordsToGoogleSheets(state.records, "history_all", true);
+  }
+
+  async function onSyncQuestionnaires() {
+    const settings = { ...state.syncSettings };
+    const validation = validateGoogleSyncSettings(settings);
+    if (!validation.ok) {
+      setSyncStatus(validation.message, "error");
+      alert(validation.message);
+      validation.focusTarget?.focus();
+      return;
+    }
+
+    setSyncBusy(true, "척도 마스터를 시트에 전송하고 있습니다...");
+    try {
+      await postGoogleSyncPayload(buildQuestionnaireMasterPayload(settings.syncToken));
+      setSyncStatus(`척도 마스터 ${state.manifest.length}개 전송 요청을 보냈습니다.`, "success");
+    } catch (error) {
+      console.error("척도 마스터 전송 실패", error);
+      setSyncStatus(`척도 마스터 전송 실패: ${error.message}`, "error");
+      alert("척도 마스터 전송에 실패했습니다.");
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function onCheckSyncStatus() {
+    const settings = { ...state.syncSettings };
+    const validation = validateGoogleSyncSettings(settings);
+    if (!validation.ok) {
+      setSyncStatus(validation.message, "error");
+      validation.focusTarget?.focus();
+      return;
+    }
+
+    setSyncBusy(true, "구글 시트 연동 상태를 확인하고 있습니다...");
+    try {
+      const response = await requestGoogleSyncJsonp(settings.webAppUrl, {
+        action: "status",
+        token: settings.syncToken
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "연동 상태를 확인하지 못했습니다.");
+      }
+
+      const statusMessage = `${response.spreadsheetName || "시트"} · 기록 ${response.recordRowCount || 0}건 · 문항 ${response.answerRowCount || 0}건`;
+      setSyncStatus(`연동 확인 완료: ${statusMessage}`, "success");
+    } catch (error) {
+      console.error("구글 시트 연동 상태 확인 실패", error);
+      setSyncStatus(`연동 상태 확인 실패: ${error.message}`, "error");
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function syncSingleRecordToGoogleSheets(record, syncScope, showAlert) {
+    const ok = await sendRecordsToGoogleSheets([record], syncScope, showAlert);
+    return ok;
+  }
+
+  async function sendRecordsToGoogleSheets(records, syncScope, showAlert) {
+    const settings = { ...state.syncSettings };
+    const validation = validateGoogleSyncSettings(settings);
+    if (!validation.ok) {
+      setSyncStatus(validation.message, "error");
+      if (showAlert) {
+        alert(validation.message);
+      }
+      validation.focusTarget?.focus();
+      return false;
+    }
+
+    const scopeLabel = syncScope === "current_result" ? "현재 결과" : syncScope === "history_all" ? "저장 결과 전체" : "선택 결과";
+    setSyncBusy(true, `${scopeLabel}를 구글 시트 DB로 전송하고 있습니다...`);
+
+    try {
+      const payload = buildGoogleSyncPayload(records, syncScope, settings.syncToken);
+      await postGoogleSyncPayload(payload);
+      setSyncStatus(`${scopeLabel} ${records.length}건 전송 요청을 보냈습니다.`, "success");
+      if (showAlert) {
+        alert(`${scopeLabel} ${records.length}건을 구글 시트로 전송했습니다.`);
+      }
+      return true;
+    } catch (error) {
+      console.error("구글 시트 전송 실패", error);
+      setSyncStatus(`구글 시트 전송 실패: ${error.message}`, "error");
+      if (showAlert) {
+        alert("구글 시트 전송에 실패했습니다.");
+      }
+      return false;
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  function buildGoogleSyncPayload(records, syncScope, syncToken) {
+    return {
+      version: 1,
+      source: "github-pages-scale-webapp",
+      syncScope,
+      sentAt: new Date().toISOString(),
+      token: syncToken,
+      appSettings: {
+        organizationName: ORG_NAME,
+        teamName: TEAM_NAME,
+        contactNote: ""
+      },
+      records: records.map((record) => structuredCloneSafe(record))
+    };
+  }
+
+  function buildQuestionnaireMasterPayload(syncToken) {
+    return {
+      version: 1,
+      source: "github-pages-scale-webapp",
+      syncScope: "questionnaire_master",
+      sentAt: new Date().toISOString(),
+      token: syncToken,
+      appSettings: {
+        organizationName: ORG_NAME,
+        teamName: TEAM_NAME,
+        contactNote: ""
+      },
+      questionnaires: [...state.questionnaires.values()].map((questionnaire) => structuredCloneSafe(questionnaire))
+    };
+  }
+
+  async function postGoogleSyncPayload(payload) {
+    const webAppUrl = state.syncSettings.webAppUrl;
+    await fetch(webAppUrl, {
+      method: "POST",
+      mode: "no-cors",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  function onDashboardCriteriaChanged() {
+    state.remoteDashboardRecords = [];
+    setDashboardStatus("현재 브라우저 저장 결과를 먼저 표시합니다. 구글 시트 DB 조회 버튼을 누르면 누적 DB 기록까지 함께 불러옵니다.");
+    renderDashboard();
+  }
+
+  async function onDashboardRefresh() {
+    await refreshDashboardRemoteRecords(false);
+  }
+
+  async function refreshDashboardRemoteRecords(silent) {
+    const settings = { ...state.syncSettings };
+    const validation = validateGoogleSyncSettings(settings);
+    if (!validation.ok) {
+      setDashboardStatus(validation.message, "error");
+      if (!silent) {
+        alert(validation.message);
+      }
+      return;
+    }
+
+    const name = ui.dashboardNameInput.value.trim();
+    const birthDate = ui.dashboardBirthInput.value;
+    const questionnaireId = ui.dashboardScaleFilter.value;
+    if (!name && !birthDate) {
+      const message = "대상자 이름 또는 생년월일을 입력한 뒤 구글 시트 DB 조회를 실행해주세요.";
+      setDashboardStatus(message, "error");
+      if (!silent) {
+        alert(message);
+      }
+      return;
+    }
+
+    setDashboardStatus("구글 시트 DB에서 대상자 기록을 조회하고 있습니다...");
+    setSyncBusy(true);
+
+    try {
+      const response = await requestGoogleSyncJsonp(settings.webAppUrl, {
+        action: "searchRecords",
+        name,
+        birthDate,
+        questionnaireId,
+        limit: "300",
+        token: settings.syncToken
+      });
+
+      if (!response?.ok) {
+        throw new Error(response?.error || "대상자 조회에 실패했습니다.");
+      }
+
+      state.remoteDashboardRecords = Array.isArray(response.records) ? response.records.map((record) => structuredCloneSafe(record)) : [];
+      setDashboardStatus(`구글 시트 DB에서 ${state.remoteDashboardRecords.length}건을 불러왔습니다.`, "success");
+      renderDashboard();
+    } catch (error) {
+      console.error("대시보드 DB 조회 실패", error);
+      state.remoteDashboardRecords = [];
+      setDashboardStatus(`구글 시트 DB 조회 실패: ${error.message}`, "error");
+      if (!silent) {
+        alert("구글 시트 DB 조회에 실패했습니다.");
+      }
+      renderDashboard();
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function requestGoogleSyncJsonp(webAppUrl, params) {
+    const callbackName = `mindmapScaleSync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const searchParams = new URLSearchParams({
+      ...params,
+      callback: callbackName,
+      _ts: String(Date.now())
+    });
+    const requestUrl = `${webAppUrl}${webAppUrl.includes("?") ? "&" : "?"}${searchParams.toString()}`;
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      const cleanup = () => {
+        delete window[callbackName];
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      };
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("구글 시트 응답 시간이 초과되었습니다."));
+      }, 12000);
+
+      window[callbackName] = (payload) => {
+        window.clearTimeout(timeoutId);
+        cleanup();
+        resolve(payload);
+      };
+
+      script.onerror = () => {
+        window.clearTimeout(timeoutId);
+        cleanup();
+        reject(new Error("구글 시트 웹앱 스크립트를 불러오지 못했습니다."));
+      };
+      script.src = requestUrl;
+      document.body.appendChild(script);
+    });
+  }
+
   function renderDashboard() {
     populateSubjectSuggestions();
-    const records = getDashboardRecords();
+    const localRecords = getLocalDashboardRecords();
+    const remoteRecords = getRemoteDashboardRecords();
+    const records = mergeDashboardRecords(localRecords, remoteRecords);
     ui.dashboardSummary.innerHTML = "";
     ui.dashboardTableBody.innerHTML = "";
 
@@ -1168,20 +1610,20 @@
         <div class="summary-card">
           <span class="section-label">안내</span>
           <strong>대상자 검색 필요</strong>
-          <p class="muted">저장 결과가 쌓인 뒤 대상자 이름이나 생년월일을 입력하면 검사 변화를 그래프로 확인할 수 있습니다.</p>
+          <p class="muted">대상자 이름과 생년월일을 입력하면 현재 브라우저 저장 결과를 먼저 확인할 수 있고, 구글 시트 DB 조회 버튼으로 누적 기록까지 함께 불러올 수 있습니다.</p>
         </div>
       `;
       return;
     }
 
     ui.dashboardEmpty.classList.add("hidden");
-    renderDashboardSummary(records);
+    renderDashboardSummary(records, localRecords.length, remoteRecords.length);
     renderDashboardChart(records);
     renderDashboardTable(records);
   }
 
-  function getDashboardRecords() {
-    const name = ui.dashboardNameInput.value.trim().toLowerCase();
+  function getLocalDashboardRecords() {
+    const name = normalizeLookupText(ui.dashboardNameInput.value);
     const birthDate = ui.dashboardBirthInput.value;
     const scaleId = ui.dashboardScaleFilter.value;
 
@@ -1194,18 +1636,39 @@
         if (scaleId && record.questionnaireId !== scaleId) {
           return false;
         }
-        const matchesName = name ? String(record.meta?.clientLabel || "").toLowerCase().includes(name) : true;
+        const matchesName = name ? normalizeLookupText(record.meta?.clientLabel) === name : true;
         const matchesBirth = birthDate ? String(record.meta?.birthDate || "") === birthDate : true;
         return matchesName && matchesBirth;
       })
-      .sort((a, b) => {
-        const aDate = String(a.meta?.sessionDate || a.createdAt || "");
-        const bDate = String(b.meta?.sessionDate || b.createdAt || "");
-        return aDate.localeCompare(bDate);
-      });
+      .sort((a, b) => compareRecordDate(a).localeCompare(compareRecordDate(b)));
   }
 
-  function renderDashboardSummary(records) {
+  function getRemoteDashboardRecords() {
+    const scaleId = ui.dashboardScaleFilter.value;
+    return [...state.remoteDashboardRecords]
+      .filter((record) => {
+        if (scaleId && record.questionnaireId !== scaleId) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => compareRecordDate(a).localeCompare(compareRecordDate(b)));
+  }
+
+  function mergeDashboardRecords(localRecords, remoteRecords) {
+    const merged = new Map();
+    [...remoteRecords, ...localRecords].forEach((record) => {
+      if (!record?.id) {
+        return;
+      }
+      if (!merged.has(record.id)) {
+        merged.set(record.id, record);
+      }
+    });
+    return [...merged.values()].sort((a, b) => compareRecordDate(a).localeCompare(compareRecordDate(b)));
+  }
+
+  function renderDashboardSummary(records, localCount, remoteCount) {
     const uniqueScales = new Set(records.map((record) => record.questionnaireId)).size;
     const uniqueDates = new Set(records.map((record) => record.meta?.sessionDate || record.createdAt?.slice(0, 10))).size;
     const latest = records.at(-1);
@@ -1236,6 +1699,11 @@
         <span class="section-label">최근 검사</span>
         <strong>${escapeHtml(latest?.meta?.sessionDate || latest?.createdAt?.slice(0, 10) || "-")}</strong>
         <p class="muted">${escapeHtml(latest?.questionnaireTitle || "-")}</p>
+      </div>
+      <div class="summary-card">
+        <span class="section-label">데이터 출처</span>
+        <strong>기기 ${localCount}건 / 시트 ${remoteCount}건</strong>
+        <p class="muted">브라우저 저장과 구글 시트 DB에서 합쳐진 기록 수</p>
       </div>
     `;
   }
@@ -1339,7 +1807,7 @@
 
   function populateSubjectSuggestions() {
     const subjectMap = new Map();
-    state.records.forEach((record) => {
+    [...state.records, ...state.remoteDashboardRecords].forEach((record) => {
       const name = record.meta?.clientLabel?.trim();
       if (!name) {
         return;
