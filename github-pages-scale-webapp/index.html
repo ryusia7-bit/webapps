@@ -27,9 +27,14 @@
           <p class="eyebrow">MindMap 다시서기</p>
           <h1>노숙인 정신건강 척도관리 웹앱</h1>
           <p class="hero-text">
-            공개 배포용 정적 웹앱입니다. 검사 결과를 현재 브라우저에 저장하고, 구글 시트 DB에도 함께 전송해
-            대상자별 변화 추이와 척도별 점수 흐름을 비교할 수 있습니다.
+            누구나 척도검사를 수행할 수 있는 공개형 웹앱입니다. 검사 결과는 현재 브라우저에 저장되며,
+            구글 시트 저장과 비교 분석은 시트 공유 권한이 승인된 사용자만 사용할 수 있습니다.
           </p>
+          <div class="hero-tags">
+            <span class="hero-tag">공개 검사</span>
+            <span class="hero-tag">기기 저장</span>
+            <span class="hero-tag">승인 사용자 전용 시트 연동</span>
+          </div>
         </div>
         <div class="hero-summary card">
           <p class="summary-label">현재 브라우저 저장 현황</p>
@@ -71,8 +76,8 @@
           <div class="sidebar-note">
             <p class="section-label">운영 메모</p>
             <p>
-              이 버전은 GitHub Pages 공개 배포용입니다. 결과는 현재 브라우저에 저장되며, 구글 시트 연동 주소를
-              설정하면 검사 결과와 척도 마스터를 시트 DB로 함께 보낼 수 있습니다.
+              이 버전은 GitHub Pages 공개 배포용입니다. 척도검사는 누구나 수행할 수 있고, 구글 시트 저장/조회는
+              대상 시트에 공유 권한이 있는 Google 계정만 사용할 수 있습니다.
             </p>
           </div>
         </aside>
@@ -222,7 +227,7 @@
                 </section>
 
                 <div class="action-row">
-                  <button id="saveResultBtn" class="btn btn-primary" type="button">저장 (기기+시트)</button>
+                  <button id="saveResultBtn" class="btn btn-primary" type="button">결과 저장</button>
                   <button id="printBtn" class="btn btn-secondary" type="button">인쇄</button>
                   <button id="exportCurrentBtn" class="btn btn-secondary" type="button">결과 파일 저장</button>
                 </div>
@@ -353,9 +358,20 @@
             <article class="card">
               <div class="section-head">
                 <div>
-                  <p class="section-label">구글 시트 DB 연동</p>
-                  <h3>저장 및 조회 연결 설정</h3>
+                  <p class="section-label">승인 사용자 전용</p>
+                  <h3>구글 시트 저장 및 분석 연결</h3>
                 </div>
+              </div>
+
+              <div class="permission-panel">
+                <div>
+                  <p class="text-label">시트 기능 사용</p>
+                  <p class="muted">권한 승인을 받은 뒤 켜면 결과 저장과 DB 조회 기능을 함께 사용합니다.</p>
+                </div>
+                <label class="toggle-switch">
+                  <input id="googleSyncEnabled" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
 
               <div class="filter-grid">
@@ -365,8 +381,21 @@
                 </label>
                 <label class="text-field">
                   <span class="text-label">동기화 토큰(선택)</span>
-                  <input id="googleSyncToken" type="password" maxlength="120" placeholder="비워두면 토큰 없이 전송" autocomplete="off" />
+                  <input id="googleSyncToken" type="password" maxlength="120" placeholder="운영자가 설정한 토큰이 있으면 입력" autocomplete="off" />
                 </label>
+              </div>
+
+              <div class="deploy-box deploy-box-accent">
+                <p><strong>권한 승인 절차</strong></p>
+                <ul class="bullet-list">
+                  <li>먼저 <strong>권한 승인 페이지</strong>를 열어 Google 로그인과 시트 접근 권한을 승인합니다.</li>
+                  <li>대상 스프레드시트에 공유된 Google 계정만 저장/조회 기능을 사용할 수 있습니다.</li>
+                  <li>권한이 없는 계정은 검사만 가능하고, 시트 저장/조회는 동작하지 않습니다.</li>
+                </ul>
+                <div class="inline-actions">
+                  <button id="openAuthorizeBtn" class="btn btn-primary" type="button">권한 승인 페이지 열기</button>
+                  <button id="openSheetBtn" class="btn btn-secondary" type="button">대상 구글 시트 열기</button>
+                </div>
               </div>
 
               <div class="inline-actions">
@@ -383,7 +412,8 @@
               <div class="deploy-box">
                 <p><strong>연동 동작 방식</strong></p>
                 <ul class="bullet-list">
-                  <li>검사 결과 저장 시 현재 브라우저 저장과 구글 시트 DB 전송을 함께 시도합니다.</li>
+                  <li>기본 저장은 현재 브라우저에만 수행됩니다.</li>
+                  <li>시트 기능 사용이 켜진 경우에만 구글 시트 DB 저장과 조회를 시도합니다.</li>
                   <li>대시보드에서는 이름과 생년월일 기준으로 구글 시트 DB를 조회해 그래프를 갱신합니다.</li>
                   <li>척도 마스터 전송은 문항 정의와 선택지 구조를 시트에 맞춰 갱신합니다.</li>
                 </ul>

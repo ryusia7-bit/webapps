@@ -3,12 +3,14 @@
 
   const ORG_NAME = "다시서기종합지원센터";
   const TEAM_NAME = "정신건강팀";
+  const GOOGLE_SHEET_URL =
+    "https://docs.google.com/spreadsheets/d/11y5p7Cp_yN2vggMOlCwn4pKNBEmio-CmkK25Nyd2nIk/edit?gid=0#gid=0";
   const DEFAULT_GOOGLE_SYNC_URL =
     "https://script.google.com/macros/s/AKfycbywbENzL--pd_pLcmJPzWvAKOhzM7SwAkL38Zd7aNldafguQO85N_U2k0v5baUxhr4E/exec";
   const STORAGE_KEYS = {
     records: "mindmap_scale_records_v1",
     worker: "mindmap_scale_worker_v1",
-    googleSync: "mindmap_scale_google_sync_v1"
+    googleSync: "mindmap_scale_google_sync_v2"
   };
   const SCALE_COLORS = [
     "#126b57",
@@ -34,7 +36,8 @@
     remoteDashboardRecords: [],
     syncSettings: {
       webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
-      syncToken: ""
+      syncToken: "",
+      syncEnabled: false
     }
   };
 
@@ -128,6 +131,9 @@
     ui.dashboardEmpty = document.getElementById("dashboardEmpty");
     ui.googleSyncUrl = document.getElementById("googleSyncUrl");
     ui.googleSyncToken = document.getElementById("googleSyncToken");
+    ui.googleSyncEnabled = document.getElementById("googleSyncEnabled");
+    ui.openAuthorizeBtn = document.getElementById("openAuthorizeBtn");
+    ui.openSheetBtn = document.getElementById("openSheetBtn");
     ui.syncCurrentBtn = document.getElementById("syncCurrentBtn");
     ui.syncHistoryBtn = document.getElementById("syncHistoryBtn");
     ui.syncQuestionnairesBtn = document.getElementById("syncQuestionnairesBtn");
@@ -136,7 +142,11 @@
   }
 
   function bindEvents() {
-    ui.scaleSearchInput.addEventListener("input", () => renderQuestionnaireNav(ui.scaleSearchInput.value));
+    const debouncedScaleSearch = debounce(() => renderQuestionnaireNav(ui.scaleSearchInput.value), 90);
+    const debouncedRecordsRender = debounce(() => renderRecordsTable(), 120);
+    const debouncedDashboardCriteria = debounce(() => onDashboardCriteriaChanged(), 180);
+
+    ui.scaleSearchInput.addEventListener("input", debouncedScaleSearch);
     ui.tabs.forEach((tab) => {
       tab.addEventListener("click", () => setActiveView(tab.dataset.view));
     });
@@ -156,7 +166,7 @@
     ui.workerName.addEventListener("input", () => {
       localStorage.setItem(STORAGE_KEYS.worker, ui.workerName.value.trim());
     });
-    ui.recordsSearchInput.addEventListener("input", renderRecordsTable);
+    ui.recordsSearchInput.addEventListener("input", debouncedRecordsRender);
     ui.recordsScaleFilter.addEventListener("change", renderRecordsTable);
     ui.recordsTableBody.addEventListener("click", onRecordsTableClick);
     ui.exportAllJsonBtn.addEventListener("click", exportAllRecordsAsJson);
@@ -165,12 +175,15 @@
     ui.importJsonBtn.addEventListener("click", () => ui.importJsonInput.click());
     ui.importJsonInput.addEventListener("change", onImportJson);
     ui.clearAllBtn.addEventListener("click", onClearAllRecords);
-    ui.dashboardNameInput.addEventListener("input", onDashboardCriteriaChanged);
+    ui.dashboardNameInput.addEventListener("input", debouncedDashboardCriteria);
     ui.dashboardBirthInput.addEventListener("change", onDashboardCriteriaChanged);
     ui.dashboardScaleFilter.addEventListener("change", onDashboardCriteriaChanged);
     ui.dashboardRefreshBtn.addEventListener("click", onDashboardRefresh);
     ui.googleSyncUrl.addEventListener("input", onGoogleSyncSettingsInput);
     ui.googleSyncToken.addEventListener("input", onGoogleSyncSettingsInput);
+    ui.googleSyncEnabled.addEventListener("change", onGoogleSyncSettingsInput);
+    ui.openAuthorizeBtn.addEventListener("click", onOpenAuthorizePage);
+    ui.openSheetBtn.addEventListener("click", () => window.open(GOOGLE_SHEET_URL, "_blank", "noopener"));
     ui.syncCurrentBtn.addEventListener("click", onSyncCurrentResult);
     ui.syncHistoryBtn.addEventListener("click", onSyncAllRecords);
     ui.syncQuestionnairesBtn.addEventListener("click", onSyncQuestionnaires);
@@ -219,7 +232,8 @@
     state.syncSettings = loadStoredSyncSettings();
     ui.googleSyncUrl.value = state.syncSettings.webAppUrl || "";
     ui.googleSyncToken.value = state.syncSettings.syncToken || "";
-    setSyncStatus(state.syncSettings.webAppUrl ? "구글 시트 연동 주소가 설정되었습니다." : "구글 시트 연동 주소를 아직 입력하지 않았습니다.");
+    ui.googleSyncEnabled.checked = Boolean(state.syncSettings.syncEnabled);
+    syncSheetControls();
   }
 
   function loadStoredSyncSettings() {
@@ -227,13 +241,15 @@
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.googleSync) || "{}");
       return {
         webAppUrl: normalizeGoogleSyncUrl(parsed.webAppUrl || DEFAULT_GOOGLE_SYNC_URL),
-        syncToken: typeof parsed.syncToken === "string" ? parsed.syncToken : ""
+        syncToken: typeof parsed.syncToken === "string" ? parsed.syncToken : "",
+        syncEnabled: Boolean(parsed.syncEnabled)
       };
     } catch (error) {
       console.warn("구글 시트 연동 설정을 읽지 못했습니다.", error);
       return {
         webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
-        syncToken: ""
+        syncToken: "",
+        syncEnabled: false
       };
     }
   }
@@ -241,12 +257,14 @@
   function onGoogleSyncSettingsInput() {
     state.syncSettings = {
       webAppUrl: normalizeGoogleSyncUrl(ui.googleSyncUrl.value),
-      syncToken: ui.googleSyncToken.value.trim()
+      syncToken: ui.googleSyncToken.value.trim(),
+      syncEnabled: Boolean(ui.googleSyncEnabled.checked)
     };
     localStorage.setItem(STORAGE_KEYS.googleSync, JSON.stringify(state.syncSettings));
+    syncSheetControls();
 
     if (!state.syncSettings.webAppUrl) {
-      setSyncStatus("구글 시트 연동 주소를 입력하면 저장 결과를 DB로 함께 보낼 수 있습니다.");
+      setSyncStatus("구글 시트 연동 주소를 입력하면 승인 사용자만 시트 저장과 조회를 사용할 수 있습니다.");
       return;
     }
 
@@ -255,7 +273,12 @@
       return;
     }
 
-    setSyncStatus("연동 설정을 저장했습니다.");
+    if (!state.syncSettings.syncEnabled) {
+      setSyncStatus("설정은 저장되었습니다. 시트 기능 사용을 켜면 승인 사용자 전용 기능이 활성화됩니다.");
+      return;
+    }
+
+    setSyncStatus("연동 설정을 저장했습니다. 권한 승인 후 시트 저장과 조회를 사용할 수 있습니다.");
   }
 
   function normalizeGoogleSyncUrl(value) {
@@ -290,11 +313,58 @@
       .toLowerCase();
   }
 
+  function syncSheetControls() {
+    const enabled = Boolean(state.syncSettings.syncEnabled);
+    [
+      ui.syncCurrentBtn,
+      ui.syncHistoryBtn,
+      ui.syncQuestionnairesBtn,
+      ui.checkSyncStatusBtn,
+      ui.dashboardRefreshBtn
+    ].forEach((button) => {
+      if (button) {
+        button.disabled = !enabled;
+      }
+    });
+    if (!enabled) {
+      setDashboardStatus("시트 기능 사용이 꺼져 있습니다. 비교 분석은 현재 브라우저 저장 결과만 표시합니다.");
+      setSyncStatus("시트 기능 사용이 꺼져 있습니다. 일반 사용자는 검사와 기기 저장만 사용할 수 있습니다.");
+    }
+  }
+
+  function onOpenAuthorizePage() {
+    const url = buildAuthorizeUrl(state.syncSettings.webAppUrl || DEFAULT_GOOGLE_SYNC_URL);
+    if (!url) {
+      setSyncStatus("구글 연동 주소가 올바르지 않아 권한 승인 페이지를 열 수 없습니다.", "error");
+      ui.googleSyncUrl.focus();
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
+  function buildAuthorizeUrl(webAppUrl) {
+    const normalized = normalizeGoogleSyncUrl(webAppUrl);
+    if (!normalized || !isValidGoogleSyncUrlFormat(normalized)) {
+      return "";
+    }
+    const url = new URL(normalized);
+    url.searchParams.set("action", "authorize");
+    return url.toString();
+  }
+
   function compareRecordDate(record) {
     return String(record?.meta?.sessionDate || record?.createdAt || "");
   }
 
-  function validateGoogleSyncSettings(settings) {
+  function validateGoogleSyncSettings(settings, options = {}) {
+    if (options.requireEnabled !== false && !settings?.syncEnabled) {
+      return {
+        ok: false,
+        message: "시트 기능 사용을 먼저 켜고, 권한 승인 페이지에서 Google 승인을 완료해주세요.",
+        focusTarget: ui.googleSyncEnabled
+      };
+    }
+
     if (!settings?.webAppUrl) {
       return {
         ok: false,
@@ -365,6 +435,7 @@
   function renderQuestionnaireNav(filterText = "") {
     const filter = String(filterText || "").trim().toLowerCase();
     ui.questionnaireNav.innerHTML = "";
+    const fragment = document.createDocumentFragment();
     const items = state.manifest.filter((item) => {
       if (!filter) {
         return true;
@@ -383,8 +454,9 @@
         <span class="nav-title">${escapeHtml(item.title)}</span>
         <span class="nav-meta">${escapeHtml(data?.shortTitle || item.id)} · ${escapeHtml(item.recommendedAge || "연령 제한 없음")}</span>
       `;
-      ui.questionnaireNav.appendChild(button);
+      fragment.appendChild(button);
     });
+    ui.questionnaireNav.appendChild(fragment);
   }
 
   function setCurrentQuestionnaire(id) {
@@ -1085,7 +1157,7 @@
     saveRecordToDevice(state.lastResult);
     let remoteMessage = "";
 
-    if (state.syncSettings.webAppUrl) {
+    if (state.syncSettings.syncEnabled && state.syncSettings.webAppUrl) {
       const synced = await syncSingleRecordToGoogleSheets(state.lastResult, "current_result", false);
       remoteMessage = synced ? " 구글 시트 DB에도 전송했습니다." : " 구글 시트 DB 전송은 실패했습니다.";
     }
@@ -1118,6 +1190,7 @@
   function renderRecordsTable() {
     ui.recordsTableBody.innerHTML = "";
     const records = getFilteredRecords();
+    const fragment = document.createDocumentFragment();
 
     ui.recordsStatusText.textContent = records.length ? `총 ${records.length}건을 표시합니다.` : "저장된 결과가 없습니다.";
     ui.recordsEmpty.classList.toggle("hidden", records.length > 0);
@@ -1143,8 +1216,9 @@
           </div>
         </td>
       `;
-      ui.recordsTableBody.appendChild(row);
+      fragment.appendChild(row);
     });
+    ui.recordsTableBody.appendChild(fragment);
   }
 
   function getFilteredRecords() {
@@ -1483,6 +1557,7 @@
     await fetch(webAppUrl, {
       method: "POST",
       mode: "no-cors",
+      credentials: "include",
       cache: "no-store",
       headers: {
         "Content-Type": "text/plain;charset=utf-8"
@@ -1576,7 +1651,7 @@
       };
       const timeoutId = window.setTimeout(() => {
         cleanup();
-        reject(new Error("구글 시트 응답 시간이 초과되었습니다."));
+        reject(new Error("구글 시트 응답이 지연되고 있습니다. 권한 승인 페이지를 먼저 열었는지 확인해주세요."));
       }, 12000);
 
       window[callbackName] = (payload) => {
@@ -1588,7 +1663,7 @@
       script.onerror = () => {
         window.clearTimeout(timeoutId);
         cleanup();
-        reject(new Error("구글 시트 웹앱 스크립트를 불러오지 못했습니다."));
+        reject(new Error("구글 시트 웹앱을 불러오지 못했습니다. 승인 페이지를 먼저 열고, 공유 권한이 있는 계정인지 확인해주세요."));
       };
       script.src = requestUrl;
       document.body.appendChild(script);
@@ -1738,47 +1813,56 @@
       tension: 0.25
     }));
 
-    destroyChart();
-    state.chart = new Chart(ui.dashboardChart, {
-      type: "line",
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: "bottom"
-          },
-          tooltip: {
-            callbacks: {
-              label(context) {
-                return `${context.dataset.label}: ${context.parsed.y}%`;
-              }
-            }
-          }
+    const chartConfig = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom"
         },
-        scales: {
-          y: {
-            min: 0,
-            max: 100,
-            ticks: {
-              callback(value) {
-                return `${value}%`;
-              }
-            },
-            title: {
-              display: true,
-              text: "정규화 점수"
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: "검사일"
+        tooltip: {
+          callbacks: {
+            label(context) {
+              return `${context.dataset.label}: ${context.parsed.y}%`;
             }
           }
         }
+      },
+      scales: {
+        y: {
+          min: 0,
+          max: 100,
+          ticks: {
+            callback(value) {
+              return `${value}%`;
+            }
+          },
+          title: {
+            display: true,
+            text: "정규화 점수"
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: "검사일"
+          }
+        }
       }
+    };
+
+    if (state.chart) {
+      state.chart.data.labels = labels;
+      state.chart.data.datasets = datasets;
+      state.chart.options = chartConfig;
+      state.chart.update();
+      return;
+    }
+
+    state.chart = new Chart(ui.dashboardChart, {
+      type: "line",
+      data: { labels, datasets },
+      options: chartConfig
     });
   }
 
@@ -1791,6 +1875,7 @@
 
   function renderDashboardTable(records) {
     ui.dashboardTableBody.innerHTML = "";
+    const fragment = document.createDocumentFragment();
     records.forEach((record) => {
       const row = document.createElement("tr");
       row.innerHTML = `
@@ -1801,8 +1886,9 @@
         <td>${escapeHtml(record.evaluation?.bandText || "")}</td>
         <td>${escapeHtml(record.meta?.workerName || "")}</td>
       `;
-      ui.dashboardTableBody.appendChild(row);
+      fragment.appendChild(row);
     });
+    ui.dashboardTableBody.appendChild(fragment);
   }
 
   function populateSubjectSuggestions() {
@@ -1861,6 +1947,14 @@
 
   function setHeroStatus(message) {
     ui.heroStatusText.textContent = message;
+  }
+
+  function debounce(callback, delay = 150) {
+    let timeoutId = 0;
+    return (...args) => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => callback(...args), delay);
+    };
   }
 
   function readMetaFields() {

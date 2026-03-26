@@ -10,7 +10,8 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     workerViewSheetName: "scale_screening_worker_view_sheet_name",
     riskViewSheetName: "scale_screening_risk_view_sheet_name",
     dashboardSheetName: "scale_screening_dashboard_sheet_name",
-    settingsSheetName: "scale_screening_settings_sheet_name"
+    settingsSheetName: "scale_screening_settings_sheet_name",
+    workspaceVersion: "scale_screening_workspace_version"
   },
   defaults: {
     targetSpreadsheetId: "11y5p7Cp_yN2vggMOlCwn4pKNBEmio-CmkK25Nyd2nIk",
@@ -38,6 +39,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     "questionnaire_title",
     "questionnaire_short_title",
     "score_text",
+    "normalized_score",
     "band_text",
     "worker_name",
     "client_label",
@@ -124,7 +126,8 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     "대상자",
     "생년월일",
     "척도",
-    "점수값",
+    "원점수",
+    "정규화점수",
     "점수표시",
     "결과구간",
     "담당자",
@@ -144,15 +147,15 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     "기록고유값"
   ],
   dashboard: {
-    clientNameCell: "B3",
-    birthDateCell: "E3",
-    namesHelperColumn: 20,
-    detailHeaderRow: 9,
-    detailStartRow: 10,
-    trendStartRow: 9,
+    clientNameCell: "B4",
+    birthDateCell: "E4",
+    namesHelperColumn: 27,
+    detailHeaderRow: 11,
+    detailStartRow: 12,
+    trendStartRow: 11,
     trendStartColumn: 14,
     chartAnchorRow: 1,
-    chartAnchorColumn: 8
+    chartAnchorColumn: 12
   },
   settingsRows: [
     ["항목", "값", "설명"],
@@ -164,11 +167,12 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     ["척도 마스터 시트", "척도마스터", "척도 메타데이터 시트"],
     ["문항 마스터 시트", "척도문항마스터", "문항 정의 시트"],
     ["선택지 마스터 시트", "척도선택지마스터", "선택지 정의 시트"],
-    ["검색 사용법", "대상자명을 입력", "척도대시보드 B3에 대상자명을 입력하면 비교표와 그래프가 갱신됩니다."],
-    ["생년월일 필터", "선택 입력", "동명이인 구분이 필요할 때 척도대시보드 E3에 생년월일을 입력합니다."]
+    ["검색 사용법", "대상자명을 입력", "척도대시보드 B4에 대상자명을 입력하면 비교표와 그래프가 갱신됩니다."],
+    ["생년월일 필터", "선택 입력", "동명이인 구분이 필요할 때 척도대시보드 E4에 생년월일을 입력합니다."]
   ]
 };
 
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v3";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
 
 function setupScaleScreeningSyncSheets() {
@@ -318,10 +322,23 @@ function doGet(e) {
   const action = normalizeText_(params.action).toLowerCase();
 
   try {
+    if (action === "authorize") {
+      return buildScaleScreeningAuthorizePage_();
+    }
+
     validateScaleScreeningSyncToken_(params.token);
 
     if (action === "searchrecords" || action === "search_records" || action === "search") {
       return createScaleScreeningJsonOutput_(searchScaleScreeningRecords_(params), callbackName);
+    }
+
+    if (action === "refreshworkspace" || action === "refresh_workspace") {
+      const workspace = buildScaleScreeningWorkspace_();
+      applyScaleScreeningDisplayFormats_();
+      invalidateScaleScreeningSyncCache_();
+      return createScaleScreeningJsonOutput_(Object.assign({
+        ok: true
+      }, workspace), callbackName);
     }
 
     return createScaleScreeningJsonOutput_(getCachedScaleScreeningSyncStatus_(), callbackName);
@@ -334,6 +351,55 @@ function doGet(e) {
       ok: false,
       error: error.message
     }, callbackName);
+  }
+}
+
+function buildScaleScreeningAuthorizePage_() {
+  try {
+    const spreadsheet = getScaleScreeningTargetSpreadsheet_();
+    const html = [
+      "<!doctype html>",
+      "<html lang=\"ko\"><head><meta charset=\"utf-8\">",
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "<title>구글 시트 권한 연결</title>",
+      "<style>",
+      "body{margin:0;padding:32px;font-family:Arial,'Malgun Gothic',sans-serif;background:#f4f7f4;color:#143127;}",
+      ".card{max-width:720px;margin:0 auto;padding:28px;border-radius:24px;background:#fff;border:1px solid rgba(20,49,39,.12);box-shadow:0 16px 40px rgba(16,50,39,.12);}",
+      "h1{margin:0 0 12px;font-size:28px;}p{line-height:1.7;margin:0 0 12px;color:#486157;}ul{margin:16px 0 0;padding-left:20px;line-height:1.7;}",
+      ".ok{display:inline-block;padding:8px 12px;border-radius:999px;background:#e8f3ed;color:#126b57;font-weight:700;margin-bottom:16px;}",
+      ".error{display:inline-block;padding:8px 12px;border-radius:999px;background:#fdecec;color:#b42318;font-weight:700;margin-bottom:16px;}",
+      "a{color:#126b57;font-weight:700;text-decoration:none;}",
+      "</style></head><body><main class=\"card\">"
+    ];
+
+    html.push("<span class=\"ok\">권한 연결 확인 완료</span>");
+    html.push("<h1>구글 시트 연동을 사용할 준비가 되었습니다.</h1>");
+    html.push("<p>현재 계정으로 대상 스프레드시트에 접근할 수 있습니다. 이제 공개 웹앱으로 돌아가 시트 저장과 조회 기능을 사용할 수 있습니다.</p>");
+    html.push("<ul>");
+    html.push("<li>연결 시트: " + escapeHtmlScale_(spreadsheet.getName()) + "</li>");
+    html.push("<li>연결 시트 ID: " + escapeHtmlScale_(spreadsheet.getId()) + "</li>");
+    html.push("<li>공개 웹앱에서 '시트 기능 사용'을 켜고 저장 또는 비교 분석을 실행하세요.</li>");
+    html.push("</ul></main></body></html>");
+    return HtmlService.createHtmlOutput(html.join("")).setTitle("구글 시트 권한 연결");
+  } catch (error) {
+    const html = [
+      "<!doctype html>",
+      "<html lang=\"ko\"><head><meta charset=\"utf-8\">",
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+      "<title>구글 시트 권한 연결 실패</title>",
+      "<style>",
+      "body{margin:0;padding:32px;font-family:Arial,'Malgun Gothic',sans-serif;background:#f8f4f4;color:#143127;}",
+      ".card{max-width:720px;margin:0 auto;padding:28px;border-radius:24px;background:#fff;border:1px solid rgba(180,54,54,.18);box-shadow:0 16px 40px rgba(16,50,39,.08);}",
+      "h1{margin:0 0 12px;font-size:28px;}p{line-height:1.7;margin:0 0 12px;color:#6b4d4d;}",
+      ".error{display:inline-block;padding:8px 12px;border-radius:999px;background:#fdecec;color:#b42318;font-weight:700;margin-bottom:16px;}",
+      "</style></head><body><main class=\"card\">",
+      "<span class=\"error\">권한 연결 실패</span>",
+      "<h1>현재 계정으로 구글 시트에 접근할 수 없습니다.</h1>",
+      "<p>이 기능은 대상 스프레드시트에 공유 권한이 있는 Google 계정만 사용할 수 있습니다.</p>",
+      "<p>오류 내용: " + escapeHtmlScale_(error.message) + "</p>",
+      "</main></body></html>"
+    ];
+    return HtmlService.createHtmlOutput(html.join("")).setTitle("구글 시트 권한 연결 실패");
   }
 }
 
@@ -383,6 +449,7 @@ function doPost(e) {
 }
 
 function buildScaleScreeningSyncStatus_() {
+  ensureScaleScreeningWorkspaceSchema_();
   applyScaleScreeningDisplayFormats_();
 
   const spreadsheet = getScaleScreeningTargetSpreadsheet_();
@@ -552,7 +619,7 @@ function parseScaleScreeningSearchRecord_(row, headerIndexMap) {
   const rawFlags = Array.isArray(rawEvaluation.flags) ? rawEvaluation.flags : [];
   const normalizedScore = rawEvaluation.normalizedScore !== null && rawEvaluation.normalizedScore !== undefined
     ? Number(rawEvaluation.normalizedScore)
-    : parseScaleNumericValue_(row[headerIndexMap.score_text]);
+    : parseScaleNumericValue_(row[headerIndexMap.normalized_score]);
 
   return {
     id: recordId,
@@ -980,6 +1047,7 @@ function buildScaleScreeningRecordRow_(record, payload) {
     questionnaire_title: toCellText_(record.questionnaireTitle),
     questionnaire_short_title: toCellText_(record.shortTitle),
     score_text: toCellText_(record.evaluation && record.evaluation.scoreText),
+    normalized_score: formatScaleNormalizedScore_(getScaleNormalizedScore_(record)),
     band_text: toCellText_(record.evaluation && record.evaluation.bandText),
     worker_name: toCellText_(record.meta && record.meta.workerName),
     client_label: toCellText_(record.meta && record.meta.clientLabel),
@@ -998,6 +1066,34 @@ function buildScaleScreeningRecordRow_(record, payload) {
     breakdown_summary: buildBreakdownSummary_(record.breakdown),
     record_json: safeStringifyScaleValue_(record)
   };
+}
+
+function getScaleNormalizedScore_(record) {
+  const evaluation = (record && record.evaluation) || {};
+  const explicitNormalized = Number(evaluation.normalizedScore);
+
+  if (Number.isFinite(explicitNormalized)) {
+    return clampScaleValue_(explicitNormalized, 0, 100);
+  }
+
+  const score = Number(evaluation.score);
+  const maxScore = Number(evaluation.maxScore);
+  if (Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0) {
+    return clampScaleValue_((score / maxScore) * 100, 0, 100);
+  }
+
+  return null;
+}
+
+function formatScaleNormalizedScore_(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return String(Math.round(value * 10) / 10);
+}
+
+function clampScaleValue_(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function buildScaleScreeningAnswerRows_(record, payload) {
@@ -1126,6 +1222,10 @@ function buildScaleScreeningWorkspace_() {
   buildScaleScreeningSettingsSheet_(settingsSheet);
 
   console.timeEnd("buildScaleScreeningWorkspace");
+  PropertiesService.getScriptProperties().setProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.workspaceVersion,
+    SCALE_SCREENING_WORKSPACE_VERSION
+  );
   return {
     workerViewSheetName: workerViewSheet.getName(),
     riskViewSheetName: riskViewSheet.getName(),
@@ -1134,19 +1234,55 @@ function buildScaleScreeningWorkspace_() {
   };
 }
 
+function ensureScaleScreeningWorkspaceSchema_() {
+  const properties = PropertiesService.getScriptProperties();
+  const currentVersion = normalizeText_(properties.getProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.workspaceVersion
+  ));
+
+  if (currentVersion === SCALE_SCREENING_WORKSPACE_VERSION) {
+    return false;
+  }
+
+  const lock = LockService.getScriptLock();
+  let hasLock = false;
+
+  try {
+    lock.waitLock(30000);
+    hasLock = true;
+
+    const lockedVersion = normalizeText_(properties.getProperty(
+      SCALE_SCREENING_SYNC_CONFIG.propertyKeys.workspaceVersion
+    ));
+    if (lockedVersion === SCALE_SCREENING_WORKSPACE_VERSION) {
+      return false;
+    }
+
+    buildScaleScreeningWorkspace_();
+    applyScaleScreeningDisplayFormats_();
+    invalidateScaleScreeningSyncCache_();
+    return true;
+  } finally {
+    if (hasLock) {
+      lock.releaseLock();
+    }
+  }
+}
+
 function buildScaleScreeningWorkerViewSheet_(sheet) {
   const recordSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningRecordSheetName_());
   const formula = '=IFERROR(SORT(FILTER({' +
     recordSheetRef + '!I2:I,' +
-    recordSheetRef + '!P2:P,' +
     recordSheetRef + '!Q2:Q,' +
+    recordSheetRef + '!R2:R,' +
     recordSheetRef + '!K2:K,' +
     'IF(' + recordSheetRef + '!M2:M="",,IFERROR(VALUE(REGEXEXTRACT(' + recordSheetRef + '!M2:M,"-?\\d+(?:\\.\\d+)?")),)),' +
+    'IF(' + recordSheetRef + '!N2:N="",,VALUE(' + recordSheetRef + '!N2:N)),' +
     recordSheetRef + '!M2:M,' +
-    recordSheetRef + '!N2:N,' +
     recordSheetRef + '!O2:O,' +
-    recordSheetRef + '!Y2:Y,' +
-    recordSheetRef + '!AA2:AA,' +
+    recordSheetRef + '!P2:P,' +
+    recordSheetRef + '!Z2:Z,' +
+    recordSheetRef + '!AB2:AB,' +
     recordSheetRef + '!A2:A' +
     '},' + recordSheetRef + '!A2:A<>""),1,FALSE),"")';
 
@@ -1156,9 +1292,13 @@ function buildScaleScreeningWorkerViewSheet_(sheet) {
     .setValues([SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders]);
   sheet.getRange(2, 1).setFormula(formula);
   sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length);
   styleHeaderRow_(sheet, 1, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
+  sheet.getRange("C:C").setNumberFormat("yyyy-mm-dd");
+  sheet.getRange("F:F").setNumberFormat("0.0");
+  applyScaleBanding_(sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 2), SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length));
+  applyScaleWorkerViewRules_(sheet);
+  setScaleColumnWidths_(sheet, [110, 150, 110, 160, 90, 100, 120, 110, 110, 180, 120, 160]);
 }
 
 function buildScaleScreeningRiskViewSheet_(sheet) {
@@ -1168,14 +1308,14 @@ function buildScaleScreeningRiskViewSheet_(sheet) {
     workerSheetRef + '!B2:B,' +
     workerSheetRef + '!C2:C,' +
     workerSheetRef + '!D2:D,' +
-    workerSheetRef + '!F2:F,' +
     workerSheetRef + '!G2:G,' +
     workerSheetRef + '!H2:H,' +
-    workerSheetRef + '!J2:J,' +
-    workerSheetRef + '!K2:K' +
+    workerSheetRef + '!I2:I,' +
+    workerSheetRef + '!K2:K,' +
+    workerSheetRef + '!L2:L' +
     '},' +
-    workerSheetRef + '!K2:K<>"",' +
-    '((' + workerSheetRef + '!J2:J<>"")+REGEXMATCH(' + workerSheetRef + '!G2:G,"^(A|B|C)"))>0' +
+    workerSheetRef + '!L2:L<>"",' +
+    '((' + workerSheetRef + '!K2:K<>"")+REGEXMATCH(' + workerSheetRef + '!H2:H,"^(A|B|C)"))>0' +
     '),1,FALSE),"")';
 
   sheet.clear();
@@ -1184,9 +1324,12 @@ function buildScaleScreeningRiskViewSheet_(sheet) {
     .setValues([SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders]);
   sheet.getRange(2, 1).setFormula(formula);
   sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length);
   styleHeaderRow_(sheet, 1, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
+  sheet.getRange("C:C").setNumberFormat("yyyy-mm-dd");
+  applyScaleBanding_(sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 2), SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length));
+  applyScaleRiskViewRules_(sheet);
+  setScaleColumnWidths_(sheet, [110, 150, 110, 160, 120, 110, 110, 220, 160]);
 }
 
 function buildScaleScreeningSettingsSheet_(sheet) {
@@ -1202,7 +1345,7 @@ function buildScaleScreeningSettingsSheet_(sheet) {
 function buildScaleScreeningDashboardSheet_(sheet) {
   const workerSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningWorkerViewSheetName_());
   const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
-  const detailFormula = "=IF($B$3=\"\",\"\",IFERROR(SORT(FILTER({" +
+  const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
     workerSheetRef + '!E2:E,' +
@@ -1211,40 +1354,44 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     workerSheetRef + '!H2:H,' +
     workerSheetRef + '!I2:I,' +
     workerSheetRef + '!J2:J,' +
-    workerSheetRef + '!K2:K' +
+    workerSheetRef + '!K2:K,' +
+    workerSheetRef + '!L2:L' +
     "}," +
-    workerSheetRef + '!B2:B=$B$3,' +
-    "IF($E$3=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$3,"yyyy-mm-dd"))' +
-    "),1,TRUE),\"검색 결과가 없습니다.\"))";
-  const trendFormula = "=IF($B$3=\"\",\"\",IFERROR(QUERY(FILTER({" +
+    workerSheetRef + '!B2:B=$B$4,' +
+    "IF($E$4=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,\"yyyy-mm-dd\"))' +
+    "),1,TRUE),{\"검색 결과가 없습니다.\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\"}))";
+  const trendFormula = "=IF($B$4=\"\",\"\",IFERROR(QUERY(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
-    workerSheetRef + '!E2:E,' +
+    workerSheetRef + '!F2:F,' +
     workerSheetRef + '!B2:B,' +
     workerSheetRef + '!C2:C' +
     "}," +
-    workerSheetRef + '!B2:B=$B$3,' +
-    "IF($E$3=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$3,\"yyyy-mm-dd\"))' +
+    workerSheetRef + '!B2:B=$B$4,' +
+    "IF($E$4=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,\"yyyy-mm-dd\"))' +
     "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
 
   sheet.clear();
-  ensureSheetSize_(sheet, 300, 26);
+  ensureSheetSize_(sheet, 320, 35);
 
-  sheet.getRange("A1").setValue("척도 검사 결과 대시보드");
-  sheet.getRange("A2").setValue("대상자명을 입력하면 날짜별 검사 결과와 척도별 점수 변화 그래프를 확인할 수 있습니다.");
-  sheet.getRange("A3").setValue("대상자명");
-  sheet.getRange("D3").setValue("생년월일");
-  sheet.getRange("A5").setValue("검사 건수");
-  sheet.getRange("D5").setValue("최근 검사일");
-  sheet.getRange("A9:I9").setValues([["검사일", "척도", "점수값", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
-  sheet.getRange("N8").setValue("점수 변화 그래프 데이터");
-  sheet.getRange("T1").setValue("대상자 목록");
+  sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
+  sheet.getRange("A2:L2").merge().setValue("대상자명과 생년월일을 입력하면 검사 이력과 척도별 점수 변화 그래프를 확인할 수 있습니다.");
+  sheet.getRange("A4").setValue("대상자명");
+  sheet.getRange("D4").setValue("생년월일");
+  sheet.getRange("G4:L4").merge().setValue("동명이인은 생년월일을 함께 입력하면 더 정확하게 조회됩니다.");
+  sheet.getRange("A6:C7").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))))&"건","0건"))');
+  sheet.getRange("D6:F7").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),1,FALSE),1,1),"-"))');
+  sheet.getRange("G6:I7").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd")),' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
+  sheet.getRange("J6:L7").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),"<>")&"건","0건"))');
+  sheet.getRange("A10:J10").setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
+  sheet.getRange("N10").setValue("점수 변화 그래프 데이터");
+  sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
 
-  sheet.getRange("B3").clearDataValidations();
-  sheet.getRange("E3").setNumberFormat("yyyy-mm-dd");
-  sheet.getRange("B5").setFormula('=IF($B$3="","",COUNTA(A10:A))');
-  sheet.getRange("E5").setFormula('=IF($B$3="","",IFERROR(MAX(A10:A),""))');
-  sheet.getRange("A10").setFormula(detailFormula);
+  sheet.getRange(dashboardConfig.clientNameCell).clearDataValidations();
+  sheet.getRange(dashboardConfig.birthDateCell).setNumberFormat("yyyy-mm-dd");
+  sheet.getRange(dashboardConfig.clientNameCell).setBackground("#ffffff");
+  sheet.getRange(dashboardConfig.birthDateCell).setBackground("#ffffff");
+  sheet.getRange("A11").setFormula(detailFormula);
   sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow)).setFormula(trendFormula);
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
     .setFormula('=ARRAYFORMULA(SORT(UNIQUE(FILTER(' + workerSheetRef + '!B2:B,' + workerSheetRef + '!B2:B<>""))))');
@@ -1255,35 +1402,176 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .build();
   sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
 
-  sheet.setFrozenRows(6);
-  sheet.autoResizeColumns(1, 9);
-  sheet.hideColumns(dashboardConfig.namesHelperColumn, 7);
-  sheet.getRange("A1:F1").merge();
-  sheet.getRange("A1:F1").setFontSize(16).setFontWeight("bold").setBackground("#d9ead3");
-  sheet.getRange("A3:E5").setBorder(true, true, true, true, true, true);
-  sheet.getRange("A3:D3").setFontWeight("bold");
-  sheet.getRange("A5:D5").setFontWeight("bold");
-  styleHeaderRow_(sheet, 9, 9);
-  sheet.getRange("N8:Z8").setFontWeight("bold").setBackground("#fff2cc");
+  sheet.setFrozenRows(10);
+  sheet.hideColumns(dashboardConfig.namesHelperColumn, 35 - dashboardConfig.namesHelperColumn + 1);
+  sheet.getRange("A1:L1").setFontSize(18).setFontWeight("bold").setBackground("#d9ead3").setHorizontalAlignment("left");
+  sheet.getRange("A2:L2").setFontColor("#4f5b52");
+  sheet.getRange("A4:F4").setFontWeight("bold");
+  sheet.getRange("A4:L4").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
+  styleHeaderRow_(sheet, 10, 10);
+  sheet.getRange("N10:Z10").setFontWeight("bold").setBackground("#fff2cc");
+  styleScaleDashboardCards_(sheet);
+  applyScaleBanding_(sheet.getRange(10, 1, Math.max(sheet.getMaxRows() - 9, 2), 10));
+  applyScaleDashboardRules_(sheet);
+  setScaleColumnWidths_(sheet, [95, 140, 85, 105, 120, 105, 105, 180, 140, 160, 90, 90, 90, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95]);
+  sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
+  sheet.getRange("D:D").setNumberFormat("0.0");
 
   const charts = sheet.getCharts();
   charts.forEach(function(chart) {
     sheet.removeChart(chart);
   });
 
-  const chartRange = sheet.getRange("N9:Z200");
+  const chartRange = sheet.getRange("N11:Z320");
   const chart = sheet.newChart()
     .asLineChart()
     .addRange(chartRange)
     .setNumHeaders(1)
-    .setOption("title", "척도별 점수 변화")
-    .setOption("legend", { position: "right" })
-    .setOption("hAxis", { title: "검사일" })
-    .setOption("vAxis", { title: "점수" })
+    .setOption("title", "검사일별 척도 변화")
+    .setOption("legend", { position: "bottom", textStyle: { fontSize: 10 } })
+    .setOption("hAxis", { title: "검사일", slantedText: true, slantedTextAngle: 30 })
+    .setOption("vAxis", { title: "정규화 점수", viewWindow: { min: 0, max: 100 } })
     .setOption("curveType", "function")
+    .setOption("lineWidth", 3)
+    .setOption("pointSize", 6)
+    .setOption("chartArea", { left: 70, top: 50, width: "72%", height: "62%" })
+    .setOption("backgroundColor", "#ffffff")
+    .setOption("series", {
+      0: { color: "#3b82f6" },
+      1: { color: "#f59e0b" },
+      2: { color: "#10b981" },
+      3: { color: "#ef4444" },
+      4: { color: "#8b5cf6" },
+      5: { color: "#14b8a6" },
+      6: { color: "#ec4899" },
+      7: { color: "#f97316" },
+      8: { color: "#64748b" }
+    })
     .setPosition(dashboardConfig.chartAnchorRow, dashboardConfig.chartAnchorColumn, 0, 0)
     .build();
   sheet.insertChart(chart);
+}
+
+function setScaleColumnWidths_(sheet, widths) {
+  widths.forEach(function(width, index) {
+    if (Number(width) > 0) {
+      sheet.setColumnWidth(index + 1, Number(width));
+    }
+  });
+}
+
+function applyScaleBanding_(range) {
+  const bandings = range.getSheet().getBandings();
+  bandings.forEach(function(banding) {
+    banding.remove();
+  });
+  range.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
+}
+
+function styleScaleDashboardCards_(sheet) {
+  [
+    { range: "A6:C7", background: "#e8f3ed", fontColor: "#1b4332" },
+    { range: "D6:F7", background: "#eef4ff", fontColor: "#1d4ed8" },
+    { range: "G6:I7", background: "#fff6db", fontColor: "#9a6700" },
+    { range: "J6:L7", background: "#fdecec", fontColor: "#b42318" }
+  ].forEach(function(card) {
+    sheet.getRange(card.range)
+      .setBackground(card.background)
+      .setFontColor(card.fontColor)
+      .setFontWeight("bold")
+      .setFontSize(12)
+      .setWrap(true)
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setBorder(true, true, true, true, false, false, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  });
+}
+
+function applyScaleWorkerViewRules_(sheet) {
+  const rules = [];
+  const normalizedRange = sheet.getRange("F2:F");
+  const warningRange = sheet.getRange("K2:K");
+
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberGreaterThanOrEqualTo(80)
+    .setBackground("#fdecec")
+    .setFontColor("#b42318")
+    .setRanges([normalizedRange])
+    .build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberBetween(60, 79.9999)
+    .setBackground("#fff4e5")
+    .setFontColor("#b54708")
+    .setRanges([normalizedRange])
+    .build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberBetween(30, 59.9999)
+    .setBackground("#fff9db")
+    .setFontColor("#9a6700")
+    .setRanges([normalizedRange])
+    .build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberLessThan(30)
+    .setBackground("#ecfdf3")
+    .setFontColor("#027a48")
+    .setRanges([normalizedRange])
+    .build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=LEN($K2)>0')
+    .setBackground("#fdecec")
+    .setFontColor("#b42318")
+    .setRanges([warningRange])
+    .build());
+
+  sheet.setConditionalFormatRules(rules);
+}
+
+function applyScaleRiskViewRules_(sheet) {
+  const rules = [
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=LEN($H2)>0')
+      .setBackground("#fdecec")
+      .setFontColor("#b42318")
+      .setRanges([sheet.getRange("A2:I")])
+      .build()
+  ];
+  sheet.setConditionalFormatRules(rules);
+}
+
+function applyScaleDashboardRules_(sheet) {
+  const rules = [
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberGreaterThanOrEqualTo(80)
+      .setBackground("#fdecec")
+      .setFontColor("#b42318")
+      .setRanges([sheet.getRange("D12:D")])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberBetween(60, 79.9999)
+      .setBackground("#fff4e5")
+      .setFontColor("#b54708")
+      .setRanges([sheet.getRange("D12:D")])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberBetween(30, 59.9999)
+      .setBackground("#fff9db")
+      .setFontColor("#9a6700")
+      .setRanges([sheet.getRange("D12:D")])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberLessThan(30)
+      .setBackground("#ecfdf3")
+      .setFontColor("#027a48")
+      .setRanges([sheet.getRange("D12:D")])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=LEN($I12)>0')
+      .setBackground("#fdecec")
+      .setFontColor("#b42318")
+      .setRanges([sheet.getRange("A12:J")])
+      .build()
+  ];
+  sheet.setConditionalFormatRules(rules);
 }
 
 function escapeScaleSheetNameForFormula_(sheetName) {
@@ -1416,11 +1704,11 @@ function formatScaleScreeningSyncSheet_(sheet, columnCount) {
 
 function applyScaleScreeningDisplayFormats_() {
   const formatTargets = [
-    { name: getScaleScreeningRecordSheetName_(), formats: { "H:H": "yyyy-mm-dd hh:mm", "I:I": "yyyy-mm-dd", "Q:Q": "yyyy-mm-dd" } },
+    { name: getScaleScreeningRecordSheetName_(), formats: { "H:H": "yyyy-mm-dd hh:mm", "I:I": "yyyy-mm-dd", "N:N": "0.0", "R:R": "yyyy-mm-dd" } },
     { name: getScaleScreeningAnswerSheetName_(), formats: { "C:C": "yyyy-mm-dd hh:mm", "D:D": "yyyy-mm-dd", "I:I": "yyyy-mm-dd" } },
-    { name: getScaleScreeningWorkerViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd" } },
+    { name: getScaleScreeningWorkerViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd", "F:F": "0.0" } },
     { name: getScaleScreeningRiskViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd" } },
-    { name: getScaleScreeningDashboardSheetName_(), formats: { "A:A": "yyyy-mm-dd", "E3": "yyyy-mm-dd" } }
+    { name: getScaleScreeningDashboardSheetName_(), formats: { "A:A": "yyyy-mm-dd", "D:D": "0.0", "E4": "yyyy-mm-dd" } }
   ];
 
   formatTargets.forEach(function(target) {
@@ -1517,6 +1805,15 @@ function normalizeScaleJsonpCallback_(callbackName) {
   }
 
   return /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(text) ? text : "";
+}
+
+function escapeHtmlScale_(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function findDisplayValueByLabel_(items, label) {
