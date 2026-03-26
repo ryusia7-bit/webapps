@@ -6,7 +6,11 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     answerSheetName: "scale_screening_answer_sheet_name",
     questionnaireSheetName: "scale_screening_questionnaire_sheet_name",
     fieldSheetName: "scale_screening_field_sheet_name",
-    optionSheetName: "scale_screening_option_sheet_name"
+    optionSheetName: "scale_screening_option_sheet_name",
+    workerViewSheetName: "scale_screening_worker_view_sheet_name",
+    riskViewSheetName: "scale_screening_risk_view_sheet_name",
+    dashboardSheetName: "scale_screening_dashboard_sheet_name",
+    settingsSheetName: "scale_screening_settings_sheet_name"
   },
   defaults: {
     targetSpreadsheetId: "129w-AhjiLg2fxGqssFeC4vcQJv9hG89M4SAxXXEKrCU",
@@ -14,7 +18,11 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     answerSheetName: "척도문항응답",
     questionnaireSheetName: "척도마스터",
     fieldSheetName: "척도문항마스터",
-    optionSheetName: "척도선택지마스터"
+    optionSheetName: "척도선택지마스터",
+    workerViewSheetName: "실무자보기",
+    riskViewSheetName: "고위험군보기",
+    dashboardSheetName: "척도대시보드",
+    settingsSheetName: "척도설정"
   },
   recordHeaders: [
     "record_id",
@@ -110,6 +118,54 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     "option_label",
     "option_score",
     "option_json"
+  ],
+  workerViewHeaders: [
+    "검사일",
+    "대상자",
+    "생년월일",
+    "척도",
+    "점수값",
+    "점수표시",
+    "결과구간",
+    "담당자",
+    "비고",
+    "경고여부",
+    "기록고유값"
+  ],
+  riskViewHeaders: [
+    "검사일",
+    "대상자",
+    "생년월일",
+    "척도",
+    "점수표시",
+    "결과구간",
+    "담당자",
+    "경고내용",
+    "기록고유값"
+  ],
+  dashboard: {
+    clientNameCell: "B3",
+    birthDateCell: "E3",
+    namesHelperColumn: 20,
+    detailHeaderRow: 9,
+    detailStartRow: 10,
+    trendStartRow: 9,
+    trendStartColumn: 14,
+    chartAnchorRow: 1,
+    chartAnchorColumn: 8
+  },
+  settingsRows: [
+    ["항목", "값", "설명"],
+    ["기록 시트", "척도검사기록", "원본 검사 결과가 저장되는 시트"],
+    ["문항응답 시트", "척도문항응답", "문항별 응답 원본 시트"],
+    ["실무자 보기 시트", "실무자보기", "실무자가 결과를 조회하는 시트"],
+    ["고위험군 보기 시트", "고위험군보기", "고위험 결과만 모아보는 시트"],
+    ["대시보드 시트", "척도대시보드", "대상자 검색 및 점수 변화 그래프 시트"],
+    ["척도 마스터 시트", "척도마스터", "척도 메타데이터 시트"],
+    ["문항 마스터 시트", "척도문항마스터", "문항 정의 시트"],
+    ["선택지 마스터 시트", "척도선택지마스터", "선택지 정의 시트"],
+    ["검색 사용법", "대상자명을 입력", "척도대시보드 B3에 대상자명을 입력하면 비교표와 그래프가 갱신됩니다."],
+    ["생년월일 필터", "선택 입력", "동명이인 구분이 필요할 때 척도대시보드 E3에 생년월일을 입력합니다."]
   ]
 };
 
@@ -142,6 +198,7 @@ function setupScaleScreeningSyncSheets() {
   formatScaleScreeningSyncSheet_(questionnaireSheet, SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders.length);
   formatScaleScreeningSyncSheet_(fieldSheet, SCALE_SCREENING_SYNC_CONFIG.fieldHeaders.length);
   formatScaleScreeningSyncSheet_(optionSheet, SCALE_SCREENING_SYNC_CONFIG.optionHeaders.length);
+  const workspaceResult = buildScaleScreeningWorkspace_();
 
   SpreadsheetApp.getUi().alert(
     "척도검사 시트 준비",
@@ -152,7 +209,27 @@ function setupScaleScreeningSyncSheets() {
       "척도 시트: " + questionnaireSheet.getName(),
       "문항마스터 시트: " + fieldSheet.getName(),
       "선택지마스터 시트: " + optionSheet.getName(),
+      "실무자 보기 시트: " + workspaceResult.workerViewSheetName,
+      "고위험군 보기 시트: " + workspaceResult.riskViewSheetName,
+      "대시보드 시트: " + workspaceResult.dashboardSheetName,
+      "설정 시트: " + workspaceResult.settingsSheetName,
       "다음 단계로 '척도검사 토큰 저장'을 실행한 뒤 웹앱에 같은 토큰을 입력하세요."
+    ].join("\n"),
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+function refreshScaleScreeningWorkspace() {
+  const result = buildScaleScreeningWorkspace_();
+
+  SpreadsheetApp.getUi().alert(
+    "척도검사 분석 시트 새로고침",
+    [
+      "조회/대시보드 시트를 다시 구성했습니다.",
+      "실무자 보기 시트: " + result.workerViewSheetName,
+      "고위험군 보기 시트: " + result.riskViewSheetName,
+      "대시보드 시트: " + result.dashboardSheetName,
+      "설정 시트: " + result.settingsSheetName
     ].join("\n"),
     SpreadsheetApp.getUi().ButtonSet.OK
   );
@@ -223,6 +300,10 @@ function showScaleScreeningSyncStatus() {
       "척도 시트: " + status.questionnaireSheetName + " (" + status.questionnaireRowCount + "행)",
       "문항마스터 시트: " + status.fieldSheetName + " (" + status.fieldRowCount + "행)",
       "선택지마스터 시트: " + status.optionSheetName + " (" + status.optionRowCount + "행)",
+      "실무자 보기 시트: " + status.workerViewSheetName + " (" + status.workerViewRowCount + "행)",
+      "고위험군 보기 시트: " + status.riskViewSheetName + " (" + status.riskViewRowCount + "행)",
+      "대시보드 시트: " + status.dashboardSheetName,
+      "설정 시트: " + status.settingsSheetName,
       "웹앱 URL은 '배포 > 새 배포 > 유형: 웹 앱'으로 발급하세요."
     ].join("\n"),
     SpreadsheetApp.getUi().ButtonSet.OK
@@ -283,11 +364,17 @@ function buildScaleScreeningSyncStatus_() {
   const questionnaireSheetName = getScaleScreeningQuestionnaireSheetName_();
   const fieldSheetName = getScaleScreeningFieldSheetName_();
   const optionSheetName = getScaleScreeningOptionSheetName_();
+  const workerViewSheetName = getScaleScreeningWorkerViewSheetName_();
+  const riskViewSheetName = getScaleScreeningRiskViewSheetName_();
+  const dashboardSheetName = getScaleScreeningDashboardSheetName_();
+  const settingsSheetName = getScaleScreeningSettingsSheetName_();
   const recordSheet = getScaleScreeningSheetIfExists_(recordSheetName);
   const answerSheet = getScaleScreeningSheetIfExists_(answerSheetName);
   const questionnaireSheet = getScaleScreeningSheetIfExists_(questionnaireSheetName);
   const fieldSheet = getScaleScreeningSheetIfExists_(fieldSheetName);
   const optionSheet = getScaleScreeningSheetIfExists_(optionSheetName);
+  const workerViewSheet = getScaleScreeningSheetIfExists_(workerViewSheetName);
+  const riskViewSheet = getScaleScreeningSheetIfExists_(riskViewSheetName);
 
   return {
     ok: true,
@@ -299,11 +386,17 @@ function buildScaleScreeningSyncStatus_() {
     questionnaireSheetName: questionnaireSheetName,
     fieldSheetName: fieldSheetName,
     optionSheetName: optionSheetName,
+    workerViewSheetName: workerViewSheetName,
+    riskViewSheetName: riskViewSheetName,
+    dashboardSheetName: dashboardSheetName,
+    settingsSheetName: settingsSheetName,
     recordRowCount: Math.max((recordSheet && recordSheet.getLastRow()) || 0, 1) - 1,
     answerRowCount: Math.max((answerSheet && answerSheet.getLastRow()) || 0, 1) - 1,
     questionnaireRowCount: Math.max((questionnaireSheet && questionnaireSheet.getLastRow()) || 0, 1) - 1,
     fieldRowCount: Math.max((fieldSheet && fieldSheet.getLastRow()) || 0, 1) - 1,
-    optionRowCount: Math.max((optionSheet && optionSheet.getLastRow()) || 0, 1) - 1
+    optionRowCount: Math.max((optionSheet && optionSheet.getLastRow()) || 0, 1) - 1,
+    workerViewRowCount: Math.max((workerViewSheet && workerViewSheet.getLastRow()) || 0, 1) - 1,
+    riskViewRowCount: Math.max((riskViewSheet && riskViewSheet.getLastRow()) || 0, 1) - 1
   };
 }
 
@@ -685,10 +778,22 @@ function buildScaleScreeningAnswerRows_(record, payload) {
 }
 
 function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
+  const keyIndex = headers.indexOf(keyField);
+  if (keyIndex === -1) {
+    throw new Error("키 필드를 찾을 수 없습니다: " + keyField);
+  }
+
+  ensureSheetSize_(sheet, Math.max(sheet.getLastRow(), 2), headers.length);
   const existingRows = getExistingRowNumberMap_(sheet, headers, keyField);
   const appendRows = [];
+  const updateRows = {};
   let inserted = 0;
   let updated = 0;
+  let existingData = [];
+
+  if (sheet.getLastRow() >= 2) {
+    existingData = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getDisplayValues();
+  }
 
   rowObjects.forEach(function(rowObject) {
     const key = normalizeText_(rowObject[keyField]);
@@ -701,7 +806,7 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
     });
 
     if (existingRows[key]) {
-      sheet.getRange(existingRows[key], 1, 1, headers.length).setValues([rowValues]);
+      updateRows[existingRows[key] - 2] = rowValues;
       updated += 1;
       return;
     }
@@ -717,10 +822,207 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
     sheet.getRange(startRow, 1, appendRows.length, headers.length).setValues(appendRows);
   }
 
+  const updateIndexes = Object.keys(updateRows);
+  if (updateIndexes.length && existingData.length) {
+    updateIndexes.forEach(function(indexText) {
+      const rowIndex = Number(indexText);
+      existingData[rowIndex] = updateRows[indexText];
+    });
+    sheet.getRange(2, 1, existingData.length, headers.length).setValues(existingData);
+  }
+
   return {
     inserted: inserted,
     updated: updated
   };
+}
+
+function buildScaleScreeningWorkspace_() {
+  console.time("buildScaleScreeningWorkspace");
+  const workerViewSheet = getOrCreateScaleScreeningSheet_(getScaleScreeningWorkerViewSheetName_());
+  const riskViewSheet = getOrCreateScaleScreeningSheet_(getScaleScreeningRiskViewSheetName_());
+  const dashboardSheet = getOrCreateScaleScreeningSheet_(getScaleScreeningDashboardSheetName_());
+  const settingsSheet = getOrCreateScaleScreeningSheet_(getScaleScreeningSettingsSheetName_());
+
+  buildScaleScreeningWorkerViewSheet_(workerViewSheet);
+  buildScaleScreeningRiskViewSheet_(riskViewSheet);
+  buildScaleScreeningDashboardSheet_(dashboardSheet);
+  buildScaleScreeningSettingsSheet_(settingsSheet);
+
+  console.timeEnd("buildScaleScreeningWorkspace");
+  return {
+    workerViewSheetName: workerViewSheet.getName(),
+    riskViewSheetName: riskViewSheet.getName(),
+    dashboardSheetName: dashboardSheet.getName(),
+    settingsSheetName: settingsSheet.getName()
+  };
+}
+
+function buildScaleScreeningWorkerViewSheet_(sheet) {
+  const recordSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningRecordSheetName_());
+  const formula = '=IFERROR(SORT(FILTER({' +
+    recordSheetRef + '!I2:I,' +
+    recordSheetRef + '!P2:P,' +
+    recordSheetRef + '!Q2:Q,' +
+    recordSheetRef + '!K2:K,' +
+    'IF(' + recordSheetRef + '!M2:M="",,IFERROR(VALUE(REGEXEXTRACT(' + recordSheetRef + '!M2:M,"-?\\d+(?:\\.\\d+)?")),)),' +
+    recordSheetRef + '!M2:M,' +
+    recordSheetRef + '!N2:N,' +
+    recordSheetRef + '!O2:O,' +
+    recordSheetRef + '!Y2:Y,' +
+    recordSheetRef + '!AA2:AA,' +
+    recordSheetRef + '!A2:A' +
+    '},' + recordSheetRef + '!A2:A<>""),1,FALSE),"")';
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 200, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length);
+  sheet.getRange(1, 1, 1, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length)
+    .setValues([SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders]);
+  sheet.getRange(2, 1).setFormula(formula);
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length);
+  styleHeaderRow_(sheet, 1, SCALE_SCREENING_SYNC_CONFIG.workerViewHeaders.length);
+  sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
+}
+
+function buildScaleScreeningRiskViewSheet_(sheet) {
+  const workerSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningWorkerViewSheetName_());
+  const formula = '=IFERROR(SORT(FILTER({' +
+    workerSheetRef + '!A2:A,' +
+    workerSheetRef + '!B2:B,' +
+    workerSheetRef + '!C2:C,' +
+    workerSheetRef + '!D2:D,' +
+    workerSheetRef + '!F2:F,' +
+    workerSheetRef + '!G2:G,' +
+    workerSheetRef + '!H2:H,' +
+    workerSheetRef + '!J2:J,' +
+    workerSheetRef + '!K2:K' +
+    '},' +
+    workerSheetRef + '!K2:K<>"",' +
+    '((' + workerSheetRef + '!J2:J<>"")+REGEXMATCH(' + workerSheetRef + '!G2:G,"^(A|B|C)"))>0' +
+    '),1,FALSE),"")';
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 200, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length);
+  sheet.getRange(1, 1, 1, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length)
+    .setValues([SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders]);
+  sheet.getRange(2, 1).setFormula(formula);
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length);
+  styleHeaderRow_(sheet, 1, SCALE_SCREENING_SYNC_CONFIG.riskViewHeaders.length);
+  sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
+}
+
+function buildScaleScreeningSettingsSheet_(sheet) {
+  sheet.clear();
+  ensureSheetSize_(sheet, SCALE_SCREENING_SYNC_CONFIG.settingsRows.length + 10, 3);
+  sheet.getRange(1, 1, SCALE_SCREENING_SYNC_CONFIG.settingsRows.length, 3)
+    .setValues(SCALE_SCREENING_SYNC_CONFIG.settingsRows);
+  sheet.setFrozenRows(1);
+  styleHeaderRow_(sheet, 1, 3);
+  sheet.autoResizeColumns(1, 3);
+}
+
+function buildScaleScreeningDashboardSheet_(sheet) {
+  const workerSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningWorkerViewSheetName_());
+  const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const detailFormula = "=IF($B$3=\"\",\"\",IFERROR(SORT(FILTER({" +
+    workerSheetRef + '!A2:A,' +
+    workerSheetRef + '!D2:D,' +
+    workerSheetRef + '!E2:E,' +
+    workerSheetRef + '!F2:F,' +
+    workerSheetRef + '!G2:G,' +
+    workerSheetRef + '!H2:H,' +
+    workerSheetRef + '!I2:I,' +
+    workerSheetRef + '!J2:J,' +
+    workerSheetRef + '!K2:K' +
+    "}," +
+    workerSheetRef + '!B2:B=$B$3,' +
+    "IF($E$3=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$3,"yyyy-mm-dd"))' +
+    "),1,TRUE),\"검색 결과가 없습니다.\"))";
+  const trendFormula = "=IF($B$3=\"\",\"\",IFERROR(QUERY(FILTER({" +
+    workerSheetRef + '!A2:A,' +
+    workerSheetRef + '!D2:D,' +
+    workerSheetRef + '!E2:E,' +
+    workerSheetRef + '!B2:B,' +
+    workerSheetRef + '!C2:C' +
+    "}," +
+    workerSheetRef + '!B2:B=$B$3,' +
+    "IF($E$3=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$3,\"yyyy-mm-dd\"))' +
+    "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 300, 26);
+
+  sheet.getRange("A1").setValue("척도 검사 결과 대시보드");
+  sheet.getRange("A2").setValue("대상자명을 입력하면 날짜별 검사 결과와 척도별 점수 변화 그래프를 확인할 수 있습니다.");
+  sheet.getRange("A3").setValue("대상자명");
+  sheet.getRange("D3").setValue("생년월일");
+  sheet.getRange("A5").setValue("검사 건수");
+  sheet.getRange("D5").setValue("최근 검사일");
+  sheet.getRange("A9:I9").setValues([["검사일", "척도", "점수값", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
+  sheet.getRange("N8").setValue("점수 변화 그래프 데이터");
+  sheet.getRange("T1").setValue("대상자 목록");
+
+  sheet.getRange("B3").clearDataValidations();
+  sheet.getRange("E3").setNumberFormat("yyyy-mm-dd");
+  sheet.getRange("B5").setFormula('=IF($B$3="","",COUNTA(A10:A))');
+  sheet.getRange("E5").setFormula('=IF($B$3="","",IFERROR(MAX(A10:A),""))');
+  sheet.getRange("A10").setFormula(detailFormula);
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow)).setFormula(trendFormula);
+  sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
+    .setFormula('=ARRAYFORMULA(SORT(UNIQUE(FILTER(' + workerSheetRef + '!B2:B,' + workerSheetRef + '!B2:B<>""))))');
+
+  const nameValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2:" + columnToLetterScale_(dashboardConfig.namesHelperColumn)), true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
+
+  sheet.setFrozenRows(6);
+  sheet.autoResizeColumns(1, 9);
+  sheet.hideColumns(dashboardConfig.namesHelperColumn, 7);
+  sheet.getRange("A1:F1").merge();
+  sheet.getRange("A1:F1").setFontSize(16).setFontWeight("bold").setBackground("#d9ead3");
+  sheet.getRange("A3:E5").setBorder(true, true, true, true, true, true);
+  sheet.getRange("A3:D3").setFontWeight("bold");
+  sheet.getRange("A5:D5").setFontWeight("bold");
+  styleHeaderRow_(sheet, 9, 9);
+  sheet.getRange("N8:Z8").setFontWeight("bold").setBackground("#fff2cc");
+
+  const charts = sheet.getCharts();
+  charts.forEach(function(chart) {
+    sheet.removeChart(chart);
+  });
+
+  const chartRange = sheet.getRange("N9:Z200");
+  const chart = sheet.newChart()
+    .asLineChart()
+    .addRange(chartRange)
+    .setNumHeaders(1)
+    .setOption("title", "척도별 점수 변화")
+    .setOption("legend", { position: "right" })
+    .setOption("hAxis", { title: "검사일" })
+    .setOption("vAxis", { title: "점수" })
+    .setOption("curveType", "function")
+    .setPosition(dashboardConfig.chartAnchorRow, dashboardConfig.chartAnchorColumn, 0, 0)
+    .build();
+  sheet.insertChart(chart);
+}
+
+function escapeScaleSheetNameForFormula_(sheetName) {
+  return "'" + String(sheetName || "").replace(/'/g, "''") + "'";
+}
+
+function columnToLetterScale_(columnNumber) {
+  let number = Number(columnNumber) || 1;
+  let result = "";
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    number = Math.floor((number - 1) / 26);
+  }
+  return result;
 }
 
 function getExistingRowNumberMap_(sheet, headers, keyField) {
@@ -868,6 +1170,30 @@ function getScaleScreeningOptionSheetName_() {
   return normalizeText_(PropertiesService.getScriptProperties().getProperty(
     SCALE_SCREENING_SYNC_CONFIG.propertyKeys.optionSheetName
   )) || SCALE_SCREENING_SYNC_CONFIG.defaults.optionSheetName;
+}
+
+function getScaleScreeningWorkerViewSheetName_() {
+  return normalizeText_(PropertiesService.getScriptProperties().getProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.workerViewSheetName
+  )) || SCALE_SCREENING_SYNC_CONFIG.defaults.workerViewSheetName;
+}
+
+function getScaleScreeningRiskViewSheetName_() {
+  return normalizeText_(PropertiesService.getScriptProperties().getProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.riskViewSheetName
+  )) || SCALE_SCREENING_SYNC_CONFIG.defaults.riskViewSheetName;
+}
+
+function getScaleScreeningDashboardSheetName_() {
+  return normalizeText_(PropertiesService.getScriptProperties().getProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.dashboardSheetName
+  )) || SCALE_SCREENING_SYNC_CONFIG.defaults.dashboardSheetName;
+}
+
+function getScaleScreeningSettingsSheetName_() {
+  return normalizeText_(PropertiesService.getScriptProperties().getProperty(
+    SCALE_SCREENING_SYNC_CONFIG.propertyKeys.settingsSheetName
+  )) || SCALE_SCREENING_SYNC_CONFIG.defaults.settingsSheetName;
 }
 
 function createScaleScreeningJsonOutput_(data) {

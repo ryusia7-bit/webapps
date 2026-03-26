@@ -46,5 +46,11 @@
     "title": "사건충격척도(IES-R)",
     "recommendedAge": "",
     "path": "./questionnaires/ies-r.json"
+  },
+  {
+    "id": "cri",
+    "title": "정신건강위기평정척도(CRI)",
+    "recommendedAge": "",
+    "path": "./questionnaires/cri.json"
   }
 ]

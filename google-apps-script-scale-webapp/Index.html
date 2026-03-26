@@ -15,7 +15,7 @@
         <p class="brand-eyebrow">Apps Script Web App</p>
         <h1 id="authAppName">MindMap 다시서기</h1>
         <p id="authAppSubtitle">노숙인 정신건강 척도 관리 웹앱</p>
-        <p class="auth-note">가입한 계정으로 로그인할 수 있습니다.</p>
+        <p class="auth-note">승인된 계정으로 로그인할 수 있습니다.</p>
       </section>
 
       <div class="auth-pane">
@@ -28,7 +28,7 @@
           <form id="loginForm" class="auth-form">
             <label class="field">
               <span>아이디</span>
-              <input type="text" id="loginUsername" autocomplete="username" placeholder="admin0109" />
+            <input type="text" id="loginUsername" autocomplete="username" placeholder="아이디" />
             </label>
             <label class="field">
               <span>비밀번호</span>
@@ -39,7 +39,7 @@
               <button type="button" id="openSignupBtn" class="ghost-btn">가입신청</button>
             </div>
           </form>
-          <p class="auth-footnote">공유 계정으로 로그인한 뒤에만 척도 입력과 저장이 가능합니다. 계정이 없으면 가입신청 페이지에서 바로 만들 수 있습니다.</p>
+          <p class="auth-footnote">로그인한 뒤에만 척도 입력과 저장이 가능합니다. 계정이 없으면 가입신청을 접수하고 승인 후 로그인할 수 있습니다.</p>
         </section>
       </div>
     </main>
@@ -326,10 +326,9 @@
                       <th>신청시각</th>
                       <th>이름</th>
                       <th>아이디</th>
-                      <th>연락처</th>
                       <th>소속</th>
-                      <th>사유</th>
                       <th>상태</th>
+                      <th>검토메모</th>
                       <th>작업</th>
                     </tr>
                   </thead>

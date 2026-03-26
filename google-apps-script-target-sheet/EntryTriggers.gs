@@ -19,6 +19,7 @@ function addCustomMenu() {
     .addItem("미처리 행 AI입력텍스트 수식 입력", "generatePendingCounselingRecords")
     .addSeparator()
     .addItem("척도검사 연동 상태 보기", "showScaleScreeningSyncStatus")
+    .addItem("척도검사 조회/대시보드 새로고침", "refreshScaleScreeningWorkspace")
     .addSeparator()
     .addSubMenu(ui.createMenu("초기 설정")
       .addItem("AI 상담기록 시트 준비", "setupCounselingAiSheet")

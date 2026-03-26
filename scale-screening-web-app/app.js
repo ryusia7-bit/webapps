@@ -926,7 +926,12 @@
 
   function renderQuestions(questions) {
     ui.questionsRoot.innerHTML = "";
+    let previousSectionTitle = "";
     questions.forEach((question) => {
+      if (question.sectionTitle && question.sectionTitle !== previousSectionTitle) {
+        ui.questionsRoot.appendChild(buildQuestionSectionHeading(question.sectionTitle));
+        previousSectionTitle = question.sectionTitle;
+      }
       const section = ui.questionTemplate.content.firstElementChild.cloneNode(true);
       section.dataset.questionId = question.id;
       section.querySelector(".question-number").textContent = question.number;
@@ -959,6 +964,13 @@
 
       ui.questionsRoot.appendChild(section);
     });
+  }
+
+  function buildQuestionSectionHeading(title) {
+    const heading = document.createElement("div");
+    heading.className = "question-section-heading";
+    heading.textContent = title;
+    return heading;
   }
 
   function buildChoiceField(field, inputName, isSubQuestion = false) {
@@ -1330,6 +1342,9 @@
   }
 
   function evaluateQuestionnaire(questionnaire, payload) {
+    if (questionnaire.scoring?.type === "cri") {
+      return evaluateCri(questionnaire, payload);
+    }
     if (questionnaire.scoring?.type === "k_mdq") {
       return evaluateKmDQ(questionnaire, payload);
     }
@@ -1368,6 +1383,64 @@
       ],
       flags,
       notes: questionnaire.scoring?.notes || []
+    };
+  }
+
+  function evaluateCri(questionnaire, payload) {
+    const responses = payload.responses || {};
+    const scoring = questionnaire.scoring || {};
+    const groups = scoring.groupQuestionIds || {};
+    const groupLabels = scoring.groupLabels || {};
+    const grades = scoring.grades || {};
+
+    const groupScore = (ids) =>
+      (ids || []).reduce((sum, id) => sum + Number(responses[id]?.score || 0), 0);
+
+    const harmScore = groupScore(groups.harm);
+    const mentalScore = groupScore(groups.mental);
+    const functionScore = groupScore(groups.function);
+    const supportScore = groupScore(groups.support);
+    const totalScore = harmScore + mentalScore + functionScore + supportScore;
+    const primaryRiskScore = Number(responses[scoring.primaryRiskQuestionId]?.score || 0);
+    const psychosisRiskScore = Number(responses[scoring.psychosisRiskQuestionId]?.score || 0);
+    const psychosisMentalSum = psychosisRiskScore + mentalScore;
+
+    let gradeKey = "E";
+    if (primaryRiskScore === 1) {
+      if (harmScore >= 2) {
+        gradeKey = psychosisMentalSum >= 1 ? "A" : "B";
+      } else {
+        gradeKey = psychosisMentalSum >= 1 ? "C" : "D";
+      }
+    } else if (harmScore >= 1) {
+      gradeKey = psychosisMentalSum >= 1 ? "C" : "D";
+    } else {
+      gradeKey = psychosisMentalSum >= 1 ? "D" : "E";
+    }
+
+    const grade = grades[gradeKey] || null;
+    const flags = [];
+    if (grade?.flagLevel && grade?.flagText) {
+      flags.push({
+        level: grade.flagLevel,
+        text: grade.flagText
+      });
+    }
+
+    return {
+      title: `${questionnaire.shortTitle || questionnaire.title} 결과`,
+      scoreText: `${totalScore}점 / 23점`,
+      bandText: grade ? grade.label : "참고 구간 없음",
+      highlights: [
+        `총점 ${totalScore}점 / 23점`,
+        `${groupLabels.harm || "자타해 위험"} ${harmScore}점`,
+        `${groupLabels.mental || "정신상태"} ${mentalScore}점`,
+        `${groupLabels.function || "기능수준"} ${functionScore}점`,
+        `${groupLabels.support || "지지체계"} ${supportScore}점`,
+        ...(grade?.description ? [grade.description] : [])
+      ],
+      flags,
+      notes: scoring.notes || []
     };
   }
 

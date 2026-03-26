@@ -114,7 +114,7 @@
           <h2>가입 신청</h2>
           <a id="backToLoginBtn" class="ghost-btn" href="#">로그인으로</a>
         </div>
-        <p id="signupMessage" class="status-inline">계정을 생성할 정보를 작성해주세요.</p>
+        <p id="signupMessage" class="status-inline">가입신청 정보를 작성해주세요.</p>
         <form id="signupForm" class="form">
           <div class="form-grid">
             <label class="field">
@@ -139,10 +139,10 @@
             </label>
           </div>
           <div class="actions">
-            <button type="submit" id="signupBtn" class="primary-btn">계정 생성</button>
+            <button type="submit" id="signupBtn" class="primary-btn">가입신청</button>
           </div>
         </form>
-        <p class="footnote">가입이 끝나면 바로 로그인할 수 있습니다. 관리자는 나중에 계정과 권한을 조정할 수 있습니다.</p>
+        <p class="footnote">가입신청이 접수되면 관리자가 승인한 뒤 로그인할 수 있습니다.</p>
       </section>
     </main>
 
@@ -172,7 +172,7 @@
           ui.signupUsername.addEventListener("input", persist("mindmap_signup_username_v1", ui.signupUsername));
 
           const bootstrap = state.publicBootstrap || {};
-          ui.signupMessage.textContent = bootstrap.signupHint || "계정을 생성할 정보를 작성해주세요.";
+          ui.signupMessage.textContent = bootstrap.signupHint || "가입신청 정보를 작성해주세요.";
           ui.signupDisplayName.value = localStorage.getItem("mindmap_signup_display_name_v1") || "";
           ui.signupUsername.value = localStorage.getItem("mindmap_signup_username_v1") || "";
           ui.signupPassword.value = "";
@@ -180,6 +180,10 @@
           ui.signupAffiliation.value = "다시서기";
           ui.backToLoginBtn.href = pageUrl("login");
           document.title = "가입 신청";
+          if (bootstrap.signupEnabled === false) {
+            ui.signupBtn.disabled = true;
+            setSignupMessage(bootstrap.signupHint || "현재는 가입신청을 사용할 수 없습니다.", "error");
+          }
         }
 
         function persist(key, input) {
@@ -190,10 +194,25 @@
           };
         }
 
-        function pageUrl(mode) {
+        function getNavigationBaseUrl() {
           const bootstrap = window.__BOOTSTRAP__ || {};
           const cachedBase = bootstrap.webAppUrl || bootstrap.loginUrl || "";
-          const baseUrl = cachedBase || window.location.href;
+          const currentUrl = window.location.href || "";
+          let topUrl = "";
+
+          try {
+            topUrl = window.top && window.top.location ? window.top.location.href || "" : "";
+          } catch (error) {
+            topUrl = "";
+          }
+
+          if (topUrl && topUrl.includes("/exec")) return topUrl;
+          if (currentUrl && currentUrl.includes("/exec")) return currentUrl;
+          return cachedBase || currentUrl;
+        }
+
+        function pageUrl(mode) {
+          const baseUrl = getNavigationBaseUrl();
           const url = new URL(baseUrl);
           if (mode === "signup") url.searchParams.set("page", "signup");
           else {
@@ -259,11 +278,11 @@
           }
 
           ui.signupBtn.disabled = true;
-          setSignupMessage("계정을 생성하는 중입니다.", "");
+          setSignupMessage("가입신청을 접수하는 중입니다.", "");
           google.script.run.withSuccessHandler((response) => {
             ui.signupBtn.disabled = false;
             if (!response?.ok) {
-              setSignupMessage(response?.message || "계정 생성에 실패했습니다.", "error");
+              setSignupMessage(response?.message || "가입신청에 실패했습니다.", "error");
               return;
             }
             localStorage.setItem("mindmap_signup_display_name_v1", payload.displayName);
@@ -271,11 +290,11 @@
             localStorage.setItem(SESSION_USERNAME_KEY, payload.username);
             ui.signupPassword.value = "";
             ui.signupPasswordConfirm.value = "";
-            setSignupMessage(response?.message || "계정이 생성되었습니다. 로그인 화면으로 이동합니다.", "success");
+            setSignupMessage(response?.message || "가입신청이 접수되었습니다. 로그인 화면으로 이동합니다.", "success");
             window.setTimeout(() => { navigateTop(pageUrl("login")); }, 1200);
           }).withFailureHandler((error) => {
             ui.signupBtn.disabled = false;
-            setSignupMessage(error?.message || "계정 생성에 실패했습니다.", "error");
+            setSignupMessage(error?.message || "가입신청에 실패했습니다.", "error");
           }).submitScaleSignupRequest(payload);
         }
       })();

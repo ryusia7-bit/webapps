@@ -735,6 +735,14 @@ body:not(.auth-only) #authMessage {
   background: rgba(255, 255, 255, 0.78);
 }
 
+.question-section-heading {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(18, 107, 87, 0.1);
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
 .question-head {
   display: grid;
   gap: 4px;

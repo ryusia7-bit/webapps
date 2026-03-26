@@ -2,6 +2,7 @@ const SCALE_WEBAPP_CONFIG = {
   appName: "MindMap 다시서기",
   subtitle: "노숙인 정신건강 척도 관리 웹앱",
   sourceApp: "mindmap-dashiseogi-apps-script-webapp",
+  publicBaseUrl: "",
   defaultHistoryLimit: 20,
   masterHashPropertyKey: "scale_webapp_master_hash",
   settings: {
@@ -27,7 +28,11 @@ const SCALE_SYNC_CONFIG = {
     answers: "척도문항응답",
     questionnaires: "척도마스터",
     fields: "척도문항마스터",
-    options: "척도선택지마스터"
+    options: "척도선택지마스터",
+    workerView: "실무자보기",
+    riskView: "고위험군보기",
+    dashboard: "척도대시보드",
+    settings: "척도설정"
   },
   headers: {
     records: [
@@ -222,36 +227,65 @@ const SCALE_SYNC_CONFIG = {
       "선택지점수",
       "원본선택지"
     ]
-  }
+  },
+  viewHeaders: {
+    workerView: [
+      "검사일",
+      "대상자",
+      "생년월일",
+      "척도",
+      "점수값",
+      "점수표시",
+      "결과구간",
+      "담당자",
+      "비고",
+      "경고여부",
+      "기록고유값"
+    ],
+    riskView: [
+      "검사일",
+      "대상자",
+      "생년월일",
+      "척도",
+      "점수표시",
+      "결과구간",
+      "담당자",
+      "경고내용",
+      "기록고유값"
+    ]
+  },
+  dashboard: {
+    clientNameCell: "B3",
+    birthDateCell: "E3",
+    trendStartCell: "N9",
+    helperNameCell: "T2"
+  },
+  settingsRows: [
+    ["항목", "값", "설명"],
+    ["기록 시트", "척도검사기록", "원본 검사 결과가 저장되는 시트"],
+    ["문항응답 시트", "척도문항응답", "문항별 응답 원본 시트"],
+    ["실무자 보기 시트", "실무자보기", "실무자가 결과를 조회하는 시트"],
+    ["고위험군 보기 시트", "고위험군보기", "고위험 결과만 모아보는 시트"],
+    ["대시보드 시트", "척도대시보드", "대상자 검색 및 점수 변화 그래프 시트"],
+    ["척도 마스터 시트", "척도마스터", "척도 메타데이터 시트"],
+    ["문항 마스터 시트", "척도문항마스터", "문항 정의 시트"],
+    ["선택지 마스터 시트", "척도선택지마스터", "선택지 정의 시트"],
+    ["검색 사용법", "대상자명을 입력", "척도대시보드 B3에 대상자명을 입력하면 비교표와 그래프가 갱신됩니다."],
+    ["생년월일 필터", "선택 입력", "동명이인 구분이 필요할 때 척도대시보드 E3에 생년월일을 입력합니다."]
+  ]
 };
 
 const SCALE_AUTH_CONFIG = {
   propertyKeys: {
     accounts: "mindmap_webapp_auth_accounts_v1",
     sessions: "mindmap_webapp_auth_sessions_v1",
-    requests: "mindmap_webapp_signup_requests_v1"
+    requests: "mindmap_webapp_signup_requests_v1",
+    pepper: "mindmap_webapp_auth_pepper_v1"
   },
   sessionTtlHours: 24 * 7,
-  defaultAccounts: [
-    {
-      username: "admin0109",
-      password: "admin0109",
-      displayName: "관리자",
-      role: "admin"
-    },
-    {
-      username: "ryusia7@homeless.go.kr",
-      password: "admin0109",
-      displayName: "ryusia7@homeless.go.kr",
-      role: "admin"
-    },
-    {
-      username: "ryusia7@gmail.com",
-      password: "admin0109",
-      displayName: "ryusia7@gmail.com",
-      role: "user"
-    }
-  ]
+  hashVersion: "sha256_iter_v1",
+  hashIterations: 2048,
+  defaultAccounts: []
 };
 
 const SCALE_AUTH_CACHE_CONFIG = {
@@ -259,13 +293,15 @@ const SCALE_AUTH_CACHE_CONFIG = {
     accounts: "mindmap_webapp_auth_accounts_cache_v1",
     sessions: "mindmap_webapp_auth_sessions_cache_v1",
     requests: "mindmap_webapp_signup_requests_cache_v1",
-    webAppUrl: "mindmap_webapp_service_url_cache_v1"
+    webAppUrl: "mindmap_webapp_service_url_cache_v1",
+    statusSummary: "mindmap_webapp_status_summary_cache_v1"
   },
   ttlSeconds: {
     accounts: 300,
     sessions: 300,
     requests: 300,
-    webAppUrl: 21600
+    webAppUrl: 21600,
+    statusSummary: 60
   }
 };
 
@@ -313,9 +349,11 @@ function doPost(e) {
     lock.waitLock(30000);
     hasLock = true;
 
-    const payload = parsePayload_(e);
+    const rawPayload = parseJsonBody_(e);
+    const payload = parsePayload_(rawPayload);
     validateToken_(payload.token);
     const result = upsertPayload_(payload);
+    invalidateScaleStatusSummaryCache_();
 
     return createJsonOutput_(Object.assign({ ok: true }, result));
   } catch (error) {
@@ -363,7 +401,7 @@ function loginScaleWebapp(username, password) {
 
     const accounts = ensureScaleWebappAccounts_();
     const account = accounts[normalizedUsername];
-    if (!account || account.active === false || normalizeText_(account.password) !== normalizedPassword) {
+    if (!account || account.active === false || !verifyScaleWebappPassword_(account, normalizedPassword)) {
       throw new Error("로그인 정보를 확인해주세요.");
     }
 
@@ -425,34 +463,19 @@ function submitScaleSignupRequest(request) {
       throw new Error("이미 접수된 가입신청이 있습니다.");
     }
 
-    accounts[normalized.username] = normalizeScaleWebappAccount_({
-      username: normalized.username,
-      password: password,
-      displayName: normalized.displayName,
-      role: "user",
-      active: true,
-      contact: normalized.contact,
-      affiliation: normalized.affiliation,
-      notes: normalized.reason,
-      sourceRequestId: normalized.requestId,
-      createdAt: normalized.createdAt,
-      updatedAt: normalized.updatedAt
-    }, normalized.username);
-    saveScaleWebappAccounts_(accounts);
-
     requests.unshift(Object.assign({}, normalized, {
-      status: "approved",
-      reviewedBy: "self-service",
-      reviewedAt: new Date().toISOString(),
-      reviewNote: "가입신청을 통해 계정이 즉시 생성되었습니다.",
-      linkedUsername: normalized.username
+      status: "pending",
+      reviewedBy: "",
+      reviewedAt: "",
+      reviewNote: "",
+      linkedUsername: ""
     }));
     saveScaleSignupRequests_(requests);
 
     return {
       ok: true,
-      message: "가입이 완료되었습니다. 바로 로그인할 수 있습니다.",
-      request: normalized
+      message: "가입신청이 접수되었습니다. 관리자 승인 후 로그인할 수 있습니다.",
+      request: sanitizeScaleSignupRequestForClient_(normalized)
     };
   } finally {
     if (hasLock) {
@@ -517,6 +540,7 @@ function saveScaleRecord(sessionToken, record) {
   };
 
   const result = upsertPayload_(payload);
+  invalidateScaleStatusSummaryCache_();
 
   return {
     ok: true,
@@ -553,11 +577,12 @@ function saveScaleWebappAccount(sessionToken, account) {
   const sessionContext = requireAdminScaleWebappSession_(sessionToken);
   const normalized = normalizeScaleWebappAccount_(account, account && account.username);
   const originalUsername = normalizeText_(account && (account.originalUsername || account.previousUsername || account.sourceUsername || account.username));
+  const providedSourceRequestId = normalizeText_(account && account.sourceRequestId);
 
   if (!normalized.username) {
     throw new Error("아이디를 입력해주세요.");
   }
-  if (!normalized.password && !originalUsername) {
+  if (!normalized.passwordHash && !originalUsername && !providedSourceRequestId) {
     throw new Error("비밀번호를 입력해주세요.");
   }
 
@@ -569,6 +594,15 @@ function saveScaleWebappAccount(sessionToken, account) {
     const accounts = ensureScaleWebappAccounts_();
     const existing = accounts[normalized.username];
     const sourceRequestId = normalizeText_(normalized.sourceRequestId);
+    const sourceRequest = sourceRequestId ? getScaleSignupRequestRecord_(sourceRequestId) : null;
+    const sourcePasswordFields = sourceRequest ? extractScaleWebappPasswordFields_(sourceRequest) : createEmptyScalePasswordFields_();
+
+    if (!originalUsername && existing) {
+      throw new Error("이미 사용 중인 아이디입니다.");
+    }
+    if (originalUsername && originalUsername !== normalized.username && existing) {
+      throw new Error("변경하려는 아이디가 이미 사용 중입니다.");
+    }
 
     if (originalUsername && originalUsername !== normalized.username && accounts[originalUsername]) {
       delete accounts[originalUsername];
@@ -583,16 +617,20 @@ function saveScaleWebappAccount(sessionToken, account) {
         displayName: normalized.displayName || normalized.username,
         role: normalized.role || "user",
         active: normalized.active !== false,
-        password: normalizeText_(normalized.password) || normalizeText_(existing && existing.password),
+        passwordHash: normalized.passwordHash || normalizeText_(existing && existing.passwordHash) || sourcePasswordFields.passwordHash,
+        passwordSalt: normalized.passwordSalt || normalizeText_(existing && existing.passwordSalt) || sourcePasswordFields.passwordSalt,
+        passwordVersion: normalized.passwordVersion || normalizeText_(existing && existing.passwordVersion) || sourcePasswordFields.passwordVersion || SCALE_AUTH_CONFIG.hashVersion,
+        passwordUpdatedAt: normalized.passwordUpdatedAt || normalizeText_(existing && existing.passwordUpdatedAt) || sourcePasswordFields.passwordUpdatedAt || new Date().toISOString(),
         createdAt: (existing && existing.createdAt) || normalized.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         sourceRequestId: sourceRequestId || normalizeText_(existing && existing.sourceRequestId)
       }
     );
 
-    if (!nextAccount.password) {
+    if (!nextAccount.passwordHash || !nextAccount.passwordSalt) {
       throw new Error("비밀번호를 입력해주세요.");
     }
+    assertAdminAccountSafety_(accounts, originalUsername, existing, nextAccount);
 
     accounts[nextAccount.username] = normalizeScaleWebappAccount_(nextAccount, nextAccount.username);
     saveScaleWebappAccounts_(accounts);
@@ -617,7 +655,7 @@ function saveScaleWebappAccount(sessionToken, account) {
 }
 
 function setScaleWebappAccountActive(sessionToken, username, active) {
-  requireAdminScaleWebappSession_(sessionToken);
+  const sessionContext = requireAdminScaleWebappSession_(sessionToken);
   const normalizedUsername = normalizeText_(username);
   if (!normalizedUsername) {
     throw new Error("아이디를 입력해주세요.");
@@ -632,6 +670,12 @@ function setScaleWebappAccountActive(sessionToken, username, active) {
     const account = accounts[normalizedUsername];
     if (!account) {
       throw new Error("계정을 찾을 수 없습니다.");
+    }
+    if (normalizedUsername === normalizeText_(sessionContext.username) && active === false) {
+      throw new Error("현재 로그인한 관리자 계정은 비활성화할 수 없습니다.");
+    }
+    if (normalizeText_(account.role) === "admin" && account.active !== false && active === false && countActiveAdminAccounts_(accounts) <= 1) {
+      throw new Error("마지막 활성 관리자 계정은 비활성화할 수 없습니다.");
     }
     account.active = active !== false;
     account.updatedAt = new Date().toISOString();
@@ -652,7 +696,7 @@ function setScaleWebappAccountActive(sessionToken, username, active) {
 }
 
 function deleteScaleWebappAccount(sessionToken, username) {
-  requireAdminScaleWebappSession_(sessionToken);
+  const sessionContext = requireAdminScaleWebappSession_(sessionToken);
   const normalizedUsername = normalizeText_(username);
   if (!normalizedUsername) {
     throw new Error("아이디를 입력해주세요.");
@@ -666,6 +710,12 @@ function deleteScaleWebappAccount(sessionToken, username) {
     const accounts = ensureScaleWebappAccounts_();
     if (!accounts[normalizedUsername]) {
       throw new Error("계정을 찾을 수 없습니다.");
+    }
+    if (normalizedUsername === normalizeText_(sessionContext.username)) {
+      throw new Error("현재 로그인한 계정은 삭제할 수 없습니다.");
+    }
+    if (normalizeText_(accounts[normalizedUsername].role) === "admin" && accounts[normalizedUsername].active !== false && countActiveAdminAccounts_(accounts) <= 1) {
+      throw new Error("마지막 활성 관리자 계정은 삭제할 수 없습니다.");
     }
     delete accounts[normalizedUsername];
     saveScaleWebappAccounts_(accounts);
@@ -735,10 +785,12 @@ function rejectScaleSignupRequest(sessionToken, requestId, reviewNote) {
 function syncScaleQuestionnaireMaster(sessionToken) {
   const sessionContext = requireScaleWebappSession_(sessionToken);
   ensureManagedSheets_();
+  const masterSync = syncQuestionnaireMaster_(true);
+  invalidateScaleStatusSummaryCache_();
   return {
     ok: true,
     authenticated: true,
-    masterSync: syncQuestionnaireMaster_(true),
+    masterSync: masterSync,
     status: buildStatusPayload_(sessionContext)
   };
 }
@@ -746,11 +798,14 @@ function syncScaleQuestionnaireMaster(sessionToken) {
 function setupScaleScreeningSheets(sessionToken) {
   requireScaleWebappSession_(sessionToken);
   ensureManagedSheets_();
+  const workspace = rebuildScaleAnalyticsWorkspace_();
+  invalidateScaleStatusSummaryCache_();
   return {
     ok: true,
     authenticated: true,
-    message: "척도검사 저장용 시트를 준비했습니다.",
-    targetSpreadsheetId: getTargetSpreadsheetId_()
+    message: "척도검사 저장용 시트와 분석 시트를 준비했습니다.",
+    targetSpreadsheetId: getTargetSpreadsheetId_(),
+    workspace: workspace
   };
 }
 
@@ -765,6 +820,7 @@ function setTargetSpreadsheetId(sessionToken, spreadsheetId) {
     SCALE_SYNC_CONFIG.propertyKeys.spreadsheetId,
     normalized
   );
+  invalidateScaleStatusSummaryCache_();
 
   return {
     ok: true,
@@ -776,6 +832,7 @@ function setTargetSpreadsheetId(sessionToken, spreadsheetId) {
 function clearTargetSpreadsheetId(sessionToken) {
   requireScaleWebappSession_(sessionToken);
   PropertiesService.getScriptProperties().deleteProperty(SCALE_SYNC_CONFIG.propertyKeys.spreadsheetId);
+  invalidateScaleStatusSummaryCache_();
   return {
     ok: true,
     authenticated: true,
@@ -794,6 +851,7 @@ function setSyncToken(sessionToken, token) {
     SCALE_SYNC_CONFIG.propertyKeys.token,
     normalized
   );
+  invalidateScaleStatusSummaryCache_();
 
   return {
     ok: true,
@@ -805,6 +863,7 @@ function setSyncToken(sessionToken, token) {
 function clearSyncToken(sessionToken) {
   requireScaleWebappSession_(sessionToken);
   PropertiesService.getScriptProperties().deleteProperty(SCALE_SYNC_CONFIG.propertyKeys.token);
+  invalidateScaleStatusSummaryCache_();
   return {
     ok: true,
     authenticated: true,
@@ -837,6 +896,7 @@ function buildTemplateBootstrap_(pageMode) {
 
 function buildPublicBootstrap_() {
   const baseUrl = getScaleWebAppUrl_();
+  const hasAccounts = hasScaleWebappAccounts_();
   return {
     ok: true,
     authenticated: false,
@@ -853,9 +913,13 @@ function buildPublicBootstrap_() {
     loginUrl: buildScaleWebAppPageUrl_(baseUrl, "login"),
     signupUrl: buildScaleWebAppPageUrl_(baseUrl, "signup"),
     appUrl: buildScaleWebAppPageUrl_(baseUrl, "app"),
-    loginHint: "가입한 계정으로 로그인해주세요. 계정이 없으면 가입신청 페이지에서 바로 만들 수 있습니다.",
-    signupEnabled: true,
-    signupHint: "가입신청 후 바로 계정이 생성됩니다.",
+    loginHint: hasAccounts
+      ? "가입한 계정으로 로그인해주세요. 계정이 없으면 가입신청을 접수하세요."
+      : "관리자 초기 계정 설정이 필요합니다. 스크립트 관리자에게 문의하세요.",
+    signupEnabled: hasAccounts,
+    signupHint: hasAccounts
+      ? "가입신청 후 관리자 승인 뒤 로그인할 수 있습니다."
+      : "초기 관리자 계정이 설정된 뒤 가입신청을 사용할 수 있습니다.",
     status: null
   };
 }
@@ -886,14 +950,15 @@ function buildBootstrapPayload_(sessionContext, options) {
 
 function buildStatusPayload_(sessionContext) {
   const currentUser = getCurrentUserContext_(sessionContext);
+  const summary = getScaleStatusSummary_();
   const payload = {
     ok: true,
     authenticated: true,
     currentUser: currentUser,
-    targetSpreadsheetId: getTargetSpreadsheetId_(),
-    targetSpreadsheetName: getTargetSpreadsheet_().getName(),
-    tokenConfigured: Boolean(getSyncToken_()),
-    sheets: getSheetStats_(),
+    targetSpreadsheetId: summary.targetSpreadsheetId,
+    targetSpreadsheetName: summary.targetSpreadsheetName,
+    tokenConfigured: summary.tokenConfigured,
+    sheets: summary.sheets,
     recentRecords: listRecentScaleRecordsInternal_(SCALE_WEBAPP_CONFIG.defaultHistoryLimit)
   };
 
@@ -936,6 +1001,12 @@ function getCurrentUserContext_(sessionContext) {
 }
 
 function getScaleWebAppUrl_() {
+  const configuredUrl = normalizeText_(SCALE_WEBAPP_CONFIG.publicBaseUrl);
+  if (configuredUrl) {
+    scaleWebAppUrlCache_ = configuredUrl;
+    return configuredUrl;
+  }
+
   if (scaleWebAppUrlCache_) {
     return scaleWebAppUrlCache_;
   }
@@ -1154,24 +1225,12 @@ function listRecentScaleRecordsInternal_(limit) {
     Math.max(sheet.getLastColumn(), SCALE_SYNC_CONFIG.headers.records.length)
   ).getDisplayValues();
 
-  const recordJsonIndex = SCALE_SYNC_CONFIG.headers.records.indexOf("record_json");
-  const records = [];
-
-  values.forEach(function(row) {
-    const jsonCell = normalizeText_(row[recordJsonIndex]);
-    if (!jsonCell) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(jsonCell);
-      if (parsed && parsed.id && parsed.questionnaireId) {
-        records.push(parsed);
-      }
-    } catch (error) {
-      // skip invalid rows
-    }
-  });
+  const headerIndex = buildHeaderIndexMap_(SCALE_SYNC_CONFIG.headers.records);
+  const records = values
+    .map(function(row) {
+      return buildRecentRecordSummaryFromRow_(row, headerIndex);
+    })
+    .filter(Boolean);
 
   return records
     .sort(function(left, right) {
@@ -1235,7 +1294,7 @@ function authenticateScaleWebappUser_(username, password) {
   const accounts = ensureScaleWebappAccounts_();
   const account = accounts[normalizedUsername];
 
-  if (!account || account.active === false || normalizeText_(account.password) !== normalizedPassword) {
+  if (!account || account.active === false || !verifyScaleWebappPassword_(account, normalizedPassword)) {
     throw new Error("로그인 정보를 확인해주세요.");
   }
 
@@ -1295,10 +1354,18 @@ function normalizeScaleWebappAccount_(account, fallbackUsername) {
   const source = account && typeof account === "object" ? account : {};
   const username = normalizeText_(source.username || fallbackUsername);
   const role = normalizeText_(source.role) === "admin" ? "admin" : "user";
+  const password = normalizeText_(source.password);
+  const passwordFields = password
+    ? buildScaleWebappPasswordFields_(password)
+    : extractScaleWebappPasswordFields_(source);
 
   return {
     username: username,
-    password: normalizeText_(source.password),
+    password: "",
+    passwordHash: passwordFields.passwordHash,
+    passwordSalt: passwordFields.passwordSalt,
+    passwordVersion: passwordFields.passwordVersion,
+    passwordUpdatedAt: passwordFields.passwordUpdatedAt,
     displayName: normalizeText_(source.displayName) || username,
     role: role,
     active: source.active !== false,
@@ -1398,7 +1465,7 @@ function saveScaleSignupRequests_(requests) {
 function listScaleSignupRequestsInternal_() {
   return getScaleSignupRequests_()
     .map(function(request) {
-      return structuredCloneSafe_(request);
+      return sanitizeScaleSignupRequestForClient_(request);
     })
     .sort(function(left, right) {
       return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
@@ -1420,6 +1487,10 @@ function normalizeScaleSignupRequest_(request) {
   if (!username) {
     throw new Error("아이디를 입력해주세요.");
   }
+  const password = normalizeText_(source.password);
+  const passwordFields = password
+    ? buildScaleWebappPasswordFields_(password)
+    : extractScaleWebappPasswordFields_(source);
 
   return {
     requestId: requestId,
@@ -1432,6 +1503,10 @@ function normalizeScaleSignupRequest_(request) {
     affiliation: "다시서기",
     reason: "",
     note: normalizeText_(source.note),
+    passwordHash: passwordFields.passwordHash,
+    passwordSalt: passwordFields.passwordSalt,
+    passwordVersion: passwordFields.passwordVersion,
+    passwordUpdatedAt: passwordFields.passwordUpdatedAt,
     reviewedBy: normalizeText_(source.reviewedBy),
     reviewedAt: normalizeText_(source.reviewedAt),
     reviewNote: normalizeText_(source.reviewNote),
@@ -1459,9 +1534,13 @@ function markScaleSignupRequestReviewed_(requestId, status, reviewedBy, reviewNo
   requests[index].reviewedAt = new Date().toISOString();
   requests[index].reviewNote = normalizeText_(reviewNote);
   requests[index].linkedUsername = normalizeText_(linkedUsername) || normalizeText_(requests[index].linkedUsername);
+  requests[index].passwordHash = "";
+  requests[index].passwordSalt = "";
+  requests[index].passwordVersion = "";
+  requests[index].passwordUpdatedAt = "";
   requests[index].updatedAt = new Date().toISOString();
   saveScaleSignupRequests_(requests);
-  return structuredCloneSafe_(requests[index]);
+  return sanitizeScaleSignupRequestForClient_(requests[index]);
 }
 
 function saveScaleWebappAccounts_(accounts) {
@@ -1490,6 +1569,199 @@ function listScaleWebappAccountsInternal_() {
     .map(function(username) {
       return sanitizeScaleWebappAccountForClient_(accounts[username], username);
     });
+}
+
+function sanitizeScaleSignupRequestForClient_(request) {
+  const normalized = normalizeScaleSignupRequest_(request);
+  return {
+    requestId: normalized.requestId,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    status: normalized.status,
+    displayName: normalized.displayName,
+    username: normalized.username,
+    contact: normalized.contact,
+    affiliation: normalized.affiliation,
+    reason: normalized.reason,
+    note: normalized.note,
+    reviewedBy: normalized.reviewedBy,
+    reviewedAt: normalized.reviewedAt,
+    reviewNote: normalized.reviewNote,
+    linkedUsername: normalized.linkedUsername
+  };
+}
+
+function createEmptyScalePasswordFields_() {
+  return {
+    passwordHash: "",
+    passwordSalt: "",
+    passwordVersion: "",
+    passwordUpdatedAt: ""
+  };
+}
+
+function extractScaleWebappPasswordFields_(source) {
+  return {
+    passwordHash: normalizeText_(source && source.passwordHash),
+    passwordSalt: normalizeText_(source && source.passwordSalt),
+    passwordVersion: normalizeText_(source && source.passwordVersion),
+    passwordUpdatedAt: normalizeText_(source && source.passwordUpdatedAt)
+  };
+}
+
+function buildScaleWebappPasswordFields_(password) {
+  const normalizedPassword = normalizeText_(password);
+  if (!normalizedPassword) {
+    return createEmptyScalePasswordFields_();
+  }
+
+  const salt = Utilities.getUuid().replace(/-/g, "");
+  return {
+    passwordHash: hashScaleWebappPassword_(normalizedPassword, salt),
+    passwordSalt: salt,
+    passwordVersion: SCALE_AUTH_CONFIG.hashVersion,
+    passwordUpdatedAt: new Date().toISOString()
+  };
+}
+
+function hashScaleWebappPassword_(password, salt) {
+  const normalizedPassword = normalizeText_(password);
+  const normalizedSalt = normalizeText_(salt);
+  if (!normalizedPassword || !normalizedSalt) {
+    return "";
+  }
+
+  let token = normalizedSalt + "::" + normalizedPassword + "::" + getScaleAuthPepper_();
+  for (let index = 0; index < SCALE_AUTH_CONFIG.hashIterations; index += 1) {
+    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token, Utilities.Charset.UTF_8);
+    token = Utilities.base64EncodeWebSafe(digest);
+  }
+  return token;
+}
+
+function generateScaleAuthPepper_() {
+  const seed = [
+    Utilities.getUuid(),
+    Utilities.getUuid(),
+    Utilities.getUuid(),
+    Utilities.getUuid()
+  ].join("::");
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    seed,
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64EncodeWebSafe(digest);
+}
+
+function getScaleAuthPepper_() {
+  const properties = PropertiesService.getScriptProperties();
+  const propertyKey = SCALE_AUTH_CONFIG.propertyKeys.pepper;
+  let pepper = normalizeText_(properties.getProperty(propertyKey));
+  if (pepper) {
+    return pepper;
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30 * 1000);
+  try {
+    pepper = normalizeText_(properties.getProperty(propertyKey));
+    if (pepper) {
+      return pepper;
+    }
+
+    pepper = generateScaleAuthPepper_();
+    properties.setProperty(propertyKey, pepper);
+    return pepper;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function verifyScaleWebappPassword_(account, password) {
+  const normalizedAccount = normalizeScaleWebappAccount_(account, account && account.username);
+  const normalizedPassword = normalizeText_(password);
+  if (!normalizedAccount.passwordHash || !normalizedAccount.passwordSalt || !normalizedPassword) {
+    return false;
+  }
+  return normalizedAccount.passwordHash === hashScaleWebappPassword_(normalizedPassword, normalizedAccount.passwordSalt);
+}
+
+function hasScaleWebappAccounts_() {
+  return Object.keys(ensureScaleWebappAccounts_()).length > 0;
+}
+
+function getScaleSignupRequestRecord_(requestId) {
+  const normalizedRequestId = normalizeText_(requestId);
+  if (!normalizedRequestId) {
+    return null;
+  }
+
+  const requests = getScaleSignupRequests_();
+  const matched = requests.filter(function(item) {
+    return item && item.requestId === normalizedRequestId;
+  })[0];
+
+  return matched ? normalizeScaleSignupRequest_(matched) : null;
+}
+
+function countActiveAdminAccounts_(accounts) {
+  return Object.keys(accounts || {}).reduce(function(total, username) {
+    const account = normalizeScaleWebappAccount_(accounts[username], username);
+    if (account.username && account.active !== false && account.role === "admin") {
+      return total + 1;
+    }
+    return total;
+  }, 0);
+}
+
+function assertAdminAccountSafety_(accounts, originalUsername, existingAccount, nextAccount) {
+  const normalizedExisting = existingAccount ? normalizeScaleWebappAccount_(existingAccount, originalUsername || existingAccount.username) : null;
+  const normalizedNext = normalizeScaleWebappAccount_(nextAccount, nextAccount && nextAccount.username);
+  const activeAdmins = countActiveAdminAccounts_(accounts);
+
+  if (activeAdmins === 0 && !(normalizedNext.role === "admin" && normalizedNext.active !== false)) {
+    throw new Error("초기 계정은 관리자 권한으로 등록해야 합니다.");
+  }
+
+  if (!normalizedExisting) {
+    return;
+  }
+
+  const wasActiveAdmin = normalizedExisting.role === "admin" && normalizedExisting.active !== false;
+  const willBeActiveAdmin = normalizedNext.role === "admin" && normalizedNext.active !== false;
+  if (wasActiveAdmin && !willBeActiveAdmin && activeAdmins <= 1) {
+    throw new Error("마지막 활성 관리자 계정은 일반 계정으로 변경하거나 비활성화할 수 없습니다.");
+  }
+}
+
+function setupInitialScaleWebappAdmin(username, password, displayName) {
+  const normalizedUsername = normalizeText_(username);
+  const normalizedPassword = normalizeText_(password);
+  const normalizedDisplayName = normalizeText_(displayName) || normalizedUsername;
+
+  if (!normalizedUsername || !normalizedPassword) {
+    throw new Error("관리자 아이디와 비밀번호를 모두 입력해주세요.");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const accounts = ensureScaleWebappAccounts_();
+    accounts[normalizedUsername] = normalizeScaleWebappAccount_({
+      username: normalizedUsername,
+      password: normalizedPassword,
+      displayName: normalizedDisplayName,
+      role: "admin",
+      active: true,
+      affiliation: "다시서기",
+      notes: "초기 관리자 계정"
+    }, normalizedUsername);
+    saveScaleWebappAccounts_(accounts);
+    return sanitizeScaleWebappAccountForClient_(accounts[normalizedUsername], normalizedUsername);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function sanitizeScaleWebappAccountForClient_(account, fallbackUsername) {
@@ -1743,15 +2015,20 @@ function pickPublicUserContext_(sessionContext) {
   };
 }
 
-function parsePayload_(e) {
+function parseJsonBody_(e) {
   if (!e || !e.postData || !e.postData.contents) {
     throw new Error("요청 본문이 비어 있습니다.");
   }
 
-  let payload;
   try {
-    payload = JSON.parse(e.postData.contents);
+    return JSON.parse(e.postData.contents);
   } catch (error) {
+    throw new Error("JSON 본문을 해석할 수 없습니다.");
+  }
+}
+
+function parsePayload_(payload) {
+  if (!payload || typeof payload !== "object") {
     throw new Error("JSON 본문을 해석할 수 없습니다.");
   }
 
@@ -1819,6 +2096,7 @@ function ensureManagedSheets_() {
   ensureSheet_(SCALE_SYNC_CONFIG.sheetNames.questionnaires, SCALE_SYNC_CONFIG.headers.questionnaires, SCALE_SYNC_CONFIG.headerLabels.questionnaires);
   ensureSheet_(SCALE_SYNC_CONFIG.sheetNames.fields, SCALE_SYNC_CONFIG.headers.fields, SCALE_SYNC_CONFIG.headerLabels.fields);
   ensureSheet_(SCALE_SYNC_CONFIG.sheetNames.options, SCALE_SYNC_CONFIG.headers.options, SCALE_SYNC_CONFIG.headerLabels.options);
+  ensureScaleAnalyticsSheets_();
 }
 
 function ensureSheet_(sheetName, headers, displayHeaders) {
@@ -1835,6 +2113,182 @@ function ensureSheet_(sheetName, headers, displayHeaders) {
 
   formatHeader_(sheet, normalizedHeaders.length);
   return sheet;
+}
+
+function ensureScaleAnalyticsSheets_() {
+  const spreadsheet = getTargetSpreadsheet_();
+  const requiredNames = [
+    SCALE_SYNC_CONFIG.sheetNames.workerView,
+    SCALE_SYNC_CONFIG.sheetNames.riskView,
+    SCALE_SYNC_CONFIG.sheetNames.dashboard,
+    SCALE_SYNC_CONFIG.sheetNames.settings
+  ];
+  const hasAllSheets = requiredNames.every(function(sheetName) {
+    return spreadsheet.getSheetByName(sheetName);
+  });
+
+  if (!hasAllSheets) {
+    rebuildScaleAnalyticsWorkspace_();
+  }
+}
+
+function rebuildScaleAnalyticsWorkspace_() {
+  const workerViewSheet = getOrCreateSheet_(SCALE_SYNC_CONFIG.sheetNames.workerView);
+  const riskViewSheet = getOrCreateSheet_(SCALE_SYNC_CONFIG.sheetNames.riskView);
+  const dashboardSheet = getOrCreateSheet_(SCALE_SYNC_CONFIG.sheetNames.dashboard);
+  const settingsSheet = getOrCreateSheet_(SCALE_SYNC_CONFIG.sheetNames.settings);
+
+  buildWorkerViewSheet_(workerViewSheet);
+  buildRiskViewSheet_(riskViewSheet);
+  buildAnalyticsSettingsSheet_(settingsSheet);
+  buildAnalyticsDashboardSheet_(dashboardSheet);
+
+  return {
+    workerViewSheetName: workerViewSheet.getName(),
+    riskViewSheetName: riskViewSheet.getName(),
+    dashboardSheetName: dashboardSheet.getName(),
+    settingsSheetName: settingsSheet.getName()
+  };
+}
+
+function buildWorkerViewSheet_(sheet) {
+  const raw = "'" + SCALE_SYNC_CONFIG.sheetNames.records + "'";
+  const formula = "=IFERROR(SORT(FILTER({"
+    + raw + "!I2:I,"
+    + raw + "!P2:P,"
+    + raw + "!Q2:Q,"
+    + raw + "!K2:K,"
+    + "IF(" + raw + "!M2:M=\"\",,IFERROR(VALUE(REGEXEXTRACT(" + raw + "!M2:M,\"-?\\d+(?:\\.\\d+)?\")),)),"
+    + raw + "!M2:M,"
+    + raw + "!N2:N,"
+    + raw + "!O2:O,"
+    + raw + "!Y2:Y,"
+    + raw + "!AA2:AA,"
+    + raw + "!A2:A"
+    + "},"
+    + raw + "!A2:A<>\"\"),1,FALSE),\"\")";
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 200, SCALE_SYNC_CONFIG.viewHeaders.workerView.length);
+  sheet.getRange(1, 1, 1, SCALE_SYNC_CONFIG.viewHeaders.workerView.length)
+    .setValues([SCALE_SYNC_CONFIG.viewHeaders.workerView]);
+  sheet.getRange(2, 1).setFormula(formula);
+  sheet.setFrozenRows(1);
+  formatHeader_(sheet, SCALE_SYNC_CONFIG.viewHeaders.workerView.length);
+}
+
+function buildRiskViewSheet_(sheet) {
+  const worker = "'" + SCALE_SYNC_CONFIG.sheetNames.workerView + "'";
+  const formula = "=IFERROR(SORT(FILTER({"
+    + worker + "!A2:A,"
+    + worker + "!B2:B,"
+    + worker + "!C2:C,"
+    + worker + "!D2:D,"
+    + worker + "!F2:F,"
+    + worker + "!G2:G,"
+    + worker + "!H2:H,"
+    + worker + "!J2:J,"
+    + worker + "!K2:K"
+    + "},"
+    + worker + "!K2:K<>\"\","
+    + "(( " + worker + "!J2:J<>\"\" )+REGEXMATCH(" + worker + "!G2:G,\"^(A|B|C)\"))>0"
+    + "),1,FALSE),\"\")";
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 200, SCALE_SYNC_CONFIG.viewHeaders.riskView.length);
+  sheet.getRange(1, 1, 1, SCALE_SYNC_CONFIG.viewHeaders.riskView.length)
+    .setValues([SCALE_SYNC_CONFIG.viewHeaders.riskView]);
+  sheet.getRange(2, 1).setFormula(formula);
+  sheet.setFrozenRows(1);
+  formatHeader_(sheet, SCALE_SYNC_CONFIG.viewHeaders.riskView.length);
+}
+
+function buildAnalyticsSettingsSheet_(sheet) {
+  sheet.clear();
+  ensureSheetSize_(sheet, SCALE_SYNC_CONFIG.settingsRows.length + 8, 3);
+  sheet.getRange(1, 1, SCALE_SYNC_CONFIG.settingsRows.length, 3)
+    .setValues(SCALE_SYNC_CONFIG.settingsRows);
+  sheet.setFrozenRows(1);
+  formatHeader_(sheet, 3);
+}
+
+function buildAnalyticsDashboardSheet_(sheet) {
+  const worker = "'" + SCALE_SYNC_CONFIG.sheetNames.workerView + "'";
+  const detailFormula = "=IF($B$3=\"\",\"\",IFERROR(SORT(FILTER({"
+    + worker + "!A2:A,"
+    + worker + "!D2:D,"
+    + worker + "!E2:E,"
+    + worker + "!F2:F,"
+    + worker + "!G2:G,"
+    + worker + "!H2:H,"
+    + worker + "!I2:I,"
+    + worker + "!J2:J,"
+    + worker + "!K2:K"
+    + "},"
+    + worker + "!B2:B=$B$3,"
+    + "IF($E$3=\"\"," + worker + "!A2:A<>\"\","
+    + worker + "!C2:C=TEXT($E$3,\"yyyy-mm-dd\"))"
+    + "),1,TRUE),\"검색 결과가 없습니다.\"))";
+  const trendFormula = "=IF($B$3=\"\",\"\",IFERROR(QUERY(FILTER({"
+    + worker + "!A2:A,"
+    + worker + "!D2:D,"
+    + worker + "!E2:E,"
+    + worker + "!B2:B,"
+    + worker + "!C2:C"
+    + "},"
+    + worker + "!B2:B=$B$3,"
+    + "IF($E$3=\"\"," + worker + "!A2:A<>\"\","
+    + worker + "!C2:C=TEXT($E$3,\"yyyy-mm-dd\"))"
+    + "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
+  const namesFormula = "=ARRAYFORMULA(SORT(UNIQUE(FILTER(" + worker + "!B2:B," + worker + "!B2:B<>\"\"))))";
+  const helperCell = SCALE_SYNC_CONFIG.dashboard.helperNameCell;
+  const helperColumnLetter = helperCell.replace(/[0-9]/g, "");
+
+  sheet.clear();
+  ensureSheetSize_(sheet, 320, 26);
+  sheet.getRange("A1").setValue("척도 검사 결과 대시보드");
+  sheet.getRange("A2").setValue("대상자명을 입력하면 날짜별 검사 결과와 척도별 점수 변화 그래프를 확인할 수 있습니다.");
+  sheet.getRange("A3").setValue("대상자명");
+  sheet.getRange("D3").setValue("생년월일");
+  sheet.getRange("A5").setValue("검사 건수");
+  sheet.getRange("D5").setValue("최근 검사일");
+  sheet.getRange("A9:I9").setValues([["검사일", "척도", "점수값", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
+  sheet.getRange("N8").setValue("점수 변화 그래프 데이터");
+  sheet.getRange("T1").setValue("대상자 목록");
+  sheet.getRange("B5").setFormula("=IF($B$3=\"\",\"\",COUNTA(A10:A))");
+  sheet.getRange("E5").setFormula("=IF($B$3=\"\",\"\",IFERROR(MAX(A10:A),\"\"))");
+  sheet.getRange("A10").setFormula(detailFormula);
+  sheet.getRange(SCALE_SYNC_CONFIG.dashboard.trendStartCell).setFormula(trendFormula);
+  sheet.getRange(helperCell).setFormula(namesFormula);
+
+  const validation = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(sheet.getRange(helperColumnLetter + "2:" + helperColumnLetter), true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange(SCALE_SYNC_CONFIG.dashboard.clientNameCell).setDataValidation(validation);
+  sheet.getRange(SCALE_SYNC_CONFIG.dashboard.birthDateCell).setNumberFormat("yyyy-mm-dd");
+  sheet.setFrozenRows(6);
+  formatHeader_(sheet, 9);
+  sheet.getRange("A1:F1").merge();
+  sheet.getRange("A1:F1").setFontSize(16);
+  sheet.getRange("N8:Z8").setBackground("#fff2cc").setFontWeight("bold");
+  sheet.hideColumns(20, 7);
+
+  const charts = sheet.getCharts();
+  charts.forEach(function(chart) {
+    sheet.removeChart(chart);
+  });
+  const chart = sheet.newChart()
+    .asLineChart()
+    .addRange(sheet.getRange("N9:Z200"))
+    .setNumHeaders(1)
+    .setOption("title", "척도별 점수 변화")
+    .setOption("legend", { position: "right" })
+    .setOption("hAxis", { title: "검사일" })
+    .setOption("vAxis", { title: "점수" })
+    .setPosition(1, 8, 0, 0)
+    .build();
+  sheet.insertChart(chart);
 }
 
 function upsertRecords_(payload) {
@@ -2018,6 +2472,7 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
   const keyIndex = headers.indexOf(keyField);
   const rowMap = {};
   const insertedRows = [];
+  const updateRows = {};
   let inserted = 0;
   let updated = 0;
 
@@ -2027,12 +2482,15 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
 
   ensureSheetSize_(sheet, Math.max(sheet.getLastRow(), 2), headers.length);
 
-  if (sheet.getLastRow() >= 2) {
-    const values = sheet.getRange(2, keyIndex + 1, sheet.getLastRow() - 1, 1).getDisplayValues();
-    values.forEach(function(row, index) {
-      const key = normalizeText_(row[0]);
+  const lastRow = sheet.getLastRow();
+  let existingData = [];
+
+  if (lastRow >= 2) {
+    existingData = sheet.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
+    existingData.forEach(function(row, index) {
+      const key = normalizeText_(row[keyIndex]);
       if (key) {
-        rowMap[key] = index + 2;
+        rowMap[key] = index;
       }
     });
   }
@@ -2047,8 +2505,8 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
       return toCellText_(rowObject[header]);
     });
 
-    if (rowMap[key]) {
-      sheet.getRange(rowMap[key], 1, 1, headers.length).setValues([rowValues]);
+    if (rowMap[key] !== undefined) {
+      updateRows[rowMap[key]] = rowValues;
       updated += 1;
       return;
     }
@@ -2062,11 +2520,73 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
     sheet.getRange(startRow, 1, insertedRows.length, headers.length).setValues(insertedRows);
   }
 
+  const updateIndexes = Object.keys(updateRows);
+  if (updateIndexes.length && existingData.length) {
+    updateIndexes.forEach(function(indexText) {
+      const rowIndex = Number(indexText);
+      existingData[rowIndex] = updateRows[indexText];
+    });
+    sheet.getRange(2, 1, existingData.length, headers.length).setValues(existingData);
+  }
+
   formatHeader_(sheet, headers.length);
 
   return {
     inserted: inserted,
     updated: updated
+  };
+}
+
+/**
+ * @param {string[]} headers
+ * @returns {Object<string, number>}
+ */
+function buildHeaderIndexMap_(headers) {
+  return (headers || []).reduce(function(result, header, index) {
+    result[header] = index;
+    return result;
+  }, {});
+}
+
+/**
+ * @param {string[]} row
+ * @param {Object<string, number>} headerIndex
+ * @returns {Object|null}
+ */
+function buildRecentRecordSummaryFromRow_(row, headerIndex) {
+  const recordId = normalizeText_(row[headerIndex.record_id]);
+  const questionnaireId = normalizeText_(row[headerIndex.questionnaire_id]);
+  if (!recordId || !questionnaireId) {
+    return null;
+  }
+
+  return {
+    id: recordId,
+    questionnaireId: questionnaireId,
+    questionnaireTitle: normalizeText_(row[headerIndex.questionnaire_title]),
+    shortTitle: normalizeText_(row[headerIndex.questionnaire_short_title]),
+    createdAt: normalizeText_(row[headerIndex.record_created_at]) || normalizeText_(row[headerIndex.exported_at]),
+    meta: {
+      sessionDate: normalizeText_(row[headerIndex.session_date]),
+      workerName: normalizeText_(row[headerIndex.worker_name]),
+      clientLabel: normalizeText_(row[headerIndex.client_label]),
+      birthDate: normalizeText_(row[headerIndex.birth_date]),
+      sessionNote: normalizeText_(row[headerIndex.session_note])
+    },
+    evaluation: {
+      scoreText: normalizeText_(row[headerIndex.score_text]),
+      bandText: normalizeText_(row[headerIndex.band_text]),
+      highlights: normalizeText_(row[headerIndex.highlights])
+        ? normalizeText_(row[headerIndex.highlights]).split(/\s*\|\s*/).filter(Boolean)
+        : [],
+      flags: normalizeText_(row[headerIndex.flags])
+        ? normalizeText_(row[headerIndex.flags]).split(/\s*\|\s*/).filter(function(text) {
+            return text;
+          }).map(function(text) {
+            return { text: text };
+          })
+        : []
+    }
   };
 }
 
@@ -2270,6 +2790,38 @@ function getTargetSpreadsheet_() {
   return SpreadsheetApp.openById(getTargetSpreadsheetId_());
 }
 
+function getScaleStatusSummary_() {
+  const cacheKey = SCALE_AUTH_CACHE_CONFIG.keys.statusSummary;
+  const cached = getScriptCacheJson_(cacheKey);
+  if (cached && typeof cached === "object") {
+    return cached;
+  }
+
+  const spreadsheet = getTargetSpreadsheet_();
+  const summary = {
+    targetSpreadsheetId: getTargetSpreadsheetId_(),
+    targetSpreadsheetName: spreadsheet.getName(),
+    tokenConfigured: Boolean(getSyncToken_()),
+    sheets: getSheetStatsFromSpreadsheet_(spreadsheet)
+  };
+
+  putScriptCacheJson_(cacheKey, summary, SCALE_AUTH_CACHE_CONFIG.ttlSeconds.statusSummary);
+  return summary;
+}
+
+function invalidateScaleStatusSummaryCache_() {
+  const cache = getScriptCache_();
+  if (!cache) {
+    return;
+  }
+
+  try {
+    cache.remove(SCALE_AUTH_CACHE_CONFIG.keys.statusSummary);
+  } catch (error) {
+    console.warn("status summary cache remove skipped", error && error.message);
+  }
+}
+
 function getTargetSpreadsheetId_() {
   const storedId = normalizeText_(PropertiesService.getScriptProperties().getProperty(
     SCALE_SYNC_CONFIG.propertyKeys.spreadsheetId
@@ -2298,7 +2850,10 @@ function getOrCreateSheet_(sheetName) {
 }
 
 function getSheetStats_() {
-  const spreadsheet = getTargetSpreadsheet_();
+  return getSheetStatsFromSpreadsheet_(getTargetSpreadsheet_());
+}
+
+function getSheetStatsFromSpreadsheet_(spreadsheet) {
   const names = SCALE_SYNC_CONFIG.sheetNames;
   const result = {};
 

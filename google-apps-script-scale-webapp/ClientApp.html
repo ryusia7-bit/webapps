@@ -104,6 +104,15 @@
     ui.loginMessage.textContent = bootstrap.loginHint || "아이디와 비밀번호를 입력해주세요.";
     ui.loginUsername.value = localStorage.getItem(SESSION_USERNAME_KEY) || "";
     document.title = appName;
+    if (bootstrap.signupEnabled === false) {
+      ui.openSignupBtn.disabled = true;
+      ui.openSignupBtn.classList.add("disabled");
+      ui.openSignupBtn.title = bootstrap.signupHint || "현재는 가입신청을 사용할 수 없습니다.";
+    } else {
+      ui.openSignupBtn.disabled = false;
+      ui.openSignupBtn.classList.remove("disabled");
+      ui.openSignupBtn.title = "";
+    }
   }
 
   function applyStatusPayload(payload) {
@@ -137,7 +146,8 @@
     google.script.run.withSuccessHandler((response) => {
       if (response?.authenticated) {
         enterAuthenticatedSession(response);
-        refreshAppStatus("로그인 상태를 복원했습니다.");
+        setStatusMessage("로그인 상태를 복원했습니다. 화면 정보를 불러오는 중입니다.", "");
+        window.setTimeout(() => refreshAppStatus("앱 정보를 불러왔습니다."), 0);
         return;
       }
 
@@ -174,7 +184,8 @@
       }
 
       enterAuthenticatedSession(response);
-      refreshAppStatus("로그인했습니다.");
+      setStatusMessage("로그인했습니다. 화면 정보를 불러오는 중입니다.", "");
+      window.setTimeout(() => refreshAppStatus("로그인했습니다."), 0);
     }).withFailureHandler((error) => {
       ui.loginBtn.disabled = false;
       setLoginMessage(error?.message || "로그인에 실패했습니다.", "error");
@@ -240,13 +251,32 @@
   }
 
   function goToSignupPage() {
+    if (ui.openSignupBtn.disabled) {
+      alert((window.__BOOTSTRAP__ || {}).signupHint || "현재는 가입신청을 사용할 수 없습니다.");
+      return;
+    }
     navigateTop(buildPageUrl("signup"));
   }
 
-  function buildPageUrl(pageMode) {
+  function getNavigationBaseUrl() {
     const bootstrap = window.__BOOTSTRAP__ || {};
     const cachedBase = bootstrap.webAppUrl || bootstrap.loginUrl || "";
-    const baseUrl = cachedBase || window.location.href;
+    const currentUrl = window.location.href || "";
+    let topUrl = "";
+
+    try {
+      topUrl = window.top && window.top.location ? window.top.location.href || "" : "";
+    } catch (error) {
+      topUrl = "";
+    }
+
+    if (topUrl && topUrl.includes("/exec")) return topUrl;
+    if (currentUrl && currentUrl.includes("/exec")) return currentUrl;
+    return cachedBase || currentUrl;
+  }
+
+  function buildPageUrl(pageMode) {
+    const baseUrl = getNavigationBaseUrl();
     const url = new URL(baseUrl);
     if (pageMode === "signup") {
       url.searchParams.set("page", "signup");
@@ -370,7 +400,12 @@
 
   function renderQuestions(questions) {
     ui.questionsRoot.innerHTML = "";
+    let previousSectionTitle = "";
     questions.forEach((question) => {
+      if (question.sectionTitle && question.sectionTitle !== previousSectionTitle) {
+        ui.questionsRoot.appendChild(buildQuestionSectionHeading(question.sectionTitle));
+        previousSectionTitle = question.sectionTitle;
+      }
       const section = ui.questionTemplate.content.firstElementChild.cloneNode(true);
       section.dataset.questionId = question.id;
       section.querySelector(".question-number").textContent = question.number || "";
@@ -382,6 +417,13 @@
       if (!question.subQuestions || !question.subQuestions.length) subWrap.remove();
       ui.questionsRoot.appendChild(section);
     });
+  }
+
+  function buildQuestionSectionHeading(title) {
+    const heading = document.createElement("div");
+    heading.className = "question-section-heading";
+    heading.textContent = title;
+    return heading;
   }
 
   function buildChoiceField(field, inputName, isSubQuestion) {
@@ -586,6 +628,7 @@
   }
 
   function evaluateQuestionnaire(questionnaire, payload) {
+    if (questionnaire.scoring?.type === "cri") return evaluateCri(questionnaire, payload);
     if (questionnaire.scoring?.type === "k_mdq") return evaluateKmDQ(questionnaire, payload);
     if (questionnaire.scoring?.type === "endorsement_with_distress") return evaluateEndorsement(questionnaire, payload);
     return evaluateSum(questionnaire, payload);
@@ -599,6 +642,59 @@
       flags.push({ level: "warn", text: "자해·자살사고 관련 문항에 응답이 있어 즉시 추가 확인이 필요합니다." });
     }
     return { title: `${questionnaire.shortTitle || questionnaire.title} 결과`, scoreText: `${total}점`, bandText: band ? band.label : "참고 구간 없음", highlights: [`총점 ${total}점`, ...(band?.description ? [band.description] : []), ...(questionnaire.scoring?.highlights || [])], flags, notes: questionnaire.scoring?.notes || [] };
+  }
+
+  function evaluateCri(questionnaire, payload) {
+    const responses = payload.responses || {};
+    const scoring = questionnaire.scoring || {};
+    const groups = scoring.groupQuestionIds || {};
+    const groupLabels = scoring.groupLabels || {};
+    const grades = scoring.grades || {};
+    const groupScore = (ids) => (ids || []).reduce((sum, id) => sum + Number(responses[id]?.score || 0), 0);
+
+    const harmScore = groupScore(groups.harm);
+    const mentalScore = groupScore(groups.mental);
+    const functionScore = groupScore(groups.function);
+    const supportScore = groupScore(groups.support);
+    const totalScore = harmScore + mentalScore + functionScore + supportScore;
+    const primaryRiskScore = Number(responses[scoring.primaryRiskQuestionId]?.score || 0);
+    const psychosisRiskScore = Number(responses[scoring.psychosisRiskQuestionId]?.score || 0);
+    const psychosisMentalSum = psychosisRiskScore + mentalScore;
+
+    let gradeKey = "E";
+    if (primaryRiskScore === 1) {
+      if (harmScore >= 2) {
+        gradeKey = psychosisMentalSum >= 1 ? "A" : "B";
+      } else {
+        gradeKey = psychosisMentalSum >= 1 ? "C" : "D";
+      }
+    } else if (harmScore >= 1) {
+      gradeKey = psychosisMentalSum >= 1 ? "C" : "D";
+    } else {
+      gradeKey = psychosisMentalSum >= 1 ? "D" : "E";
+    }
+
+    const grade = grades[gradeKey] || null;
+    const flags = [];
+    if (grade?.flagLevel && grade?.flagText) {
+      flags.push({ level: grade.flagLevel, text: grade.flagText });
+    }
+
+    return {
+      title: `${questionnaire.shortTitle || questionnaire.title} 결과`,
+      scoreText: `${totalScore}점 / 23점`,
+      bandText: grade ? grade.label : "참고 구간 없음",
+      highlights: [
+        `총점 ${totalScore}점 / 23점`,
+        `${groupLabels.harm || "자타해 위험"} ${harmScore}점`,
+        `${groupLabels.mental || "정신상태"} ${mentalScore}점`,
+        `${groupLabels.function || "기능수준"} ${functionScore}점`,
+        `${groupLabels.support || "지지체계"} ${supportScore}점`,
+        ...(grade?.description ? [grade.description] : [])
+      ],
+      flags,
+      notes: scoring.notes || []
+    };
   }
 
   function evaluateEndorsement(questionnaire, payload) {
@@ -724,13 +820,12 @@
         `<td>${escapeHtml(formatDateTime(request.createdAt || ""))}</td>`,
         `<td>${escapeHtml(request.displayName || "")}</td>`,
         `<td>${escapeHtml(request.username || "")}</td>`,
-        `<td>${escapeHtml(request.contact || "")}</td>`,
         `<td>${escapeHtml(request.affiliation || "")}</td>`,
-        `<td>${escapeHtml(request.reason || request.note || "")}</td>`,
         `<td>${escapeHtml(formatSignupStatusLabel(request.status))}</td>`,
+        `<td>${escapeHtml(request.reviewNote || "-")}</td>`,
         `<td>
           <div class="admin-action-group">
-            <button type="button" class="admin-mini-btn neutral" data-admin-action="prefill-account" data-request-id="${escapeHtml(request.requestId || "")}">반영</button>
+            <button type="button" class="admin-mini-btn neutral" data-admin-action="prefill-account" data-request-id="${escapeHtml(request.requestId || "")}">승인 준비</button>
             <button type="button" class="admin-mini-btn warn" data-admin-action="reject-request" data-request-id="${escapeHtml(request.requestId || "")}">거절</button>
           </div>
         </td>`
@@ -789,9 +884,9 @@
     ui.adminActive.value = "true";
     ui.adminContact.value = request?.contact || "";
     ui.adminAffiliation.value = request?.affiliation || "";
-    ui.adminNotes.value = [request?.reason || "", request?.note || "", `신청고유값: ${request?.requestId || ""}`].filter(Boolean).join("\n");
+    ui.adminNotes.value = [request?.note || "", `신청고유값: ${request?.requestId || ""}`].filter(Boolean).join("\n");
     ui.adminFormTitle.textContent = request?.username ? `신청 반영: ${request.username}` : "계정 등록";
-    setAdminAccountMessage("가입 신청 내용을 계정 등록 폼에 반영했습니다.", "success");
+    setAdminAccountMessage("가입 신청 내용을 승인 폼에 반영했습니다. 저장하면 계정이 승인됩니다.", "success");
     ui.adminUsername.focus();
   }
 
