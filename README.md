@@ -6,14 +6,15 @@
 
 ## 프로젝트 범위
 
-이 프로젝트는 아래 4개 폴더가 함께 동작하는 구조입니다.
+이 프로젝트는 아래 5개 폴더가 함께 동작하는 구조입니다.
 
 - `docs`
 - `google-apps-script`
+- `github-pages-scale-webapp`
 - `python-tools`
 - `performance-web-app`
 
-즉, 개별 폴더 4개가 아니라 하나의 실적 자동화 프로젝트를 구성하는 부품들입니다.
+즉, 개별 폴더 5개가 아니라 하나의 실적 자동화 프로젝트를 구성하는 부품들입니다.
 
 ## 폴더별 역할
 
@@ -29,6 +30,12 @@
 - Google Sheets 기반 운영 자동화 본체
 - `원본데이터`를 읽어 정규화 시트와 대시보드를 생성
 - Apps Script 편집기 또는 `clasp` 연동 방식으로 배포
+
+### `github-pages-scale-webapp`
+
+- GitHub Pages 공개 배포용 정적 척도검사 웹앱
+- 서버 없이 브라우저 로컬 저장 기반으로 동작
+- 비교 분석 대시보드와 JSON/CSV 백업 지원
 
 ### `python-tools`
 
@@ -78,6 +85,12 @@ python .\convert_regional_daily_to_raw_input.py --help
 ```powershell
 cd "H:\공유 드라이브\정신건강팀공유드라이브\정신건강팀자동화프로젝트\project-01-performance-automation\performance-web-app"
 .\serve-local.ps1
+```
+
+### 공개 웹앱 작업을 시작할 때
+
+```powershell
+cd "H:\공유 드라이브\정신건강팀공유드라이브\정신건강팀자동화프로젝트\project-01-performance-automation\github-pages-scale-webapp"
 ```
 
 ### Apps Script 작업을 시작할 때

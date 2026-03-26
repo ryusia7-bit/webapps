@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindMap 다시서기 | 노숙인 정신건강 척도관리 웹앱</title>
+    <meta
+      name="description"
+      content="다시서기종합지원센터 정신건강팀을 위한 공개형 척도검사 웹앱"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script defer src="./questionnaires-data.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="page-backdrop"></div>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">MindMap 다시서기</p>
+          <h1>노숙인 정신건강 척도관리 웹앱</h1>
+          <p class="hero-text">
+            공개 배포용 정적 웹앱입니다. 검사 결과는 현재 브라우저에 저장되며, 대상자 이름과 검사일을 기준으로
+            결과 비교와 변화 추적을 할 수 있습니다.
+          </p>
+        </div>
+        <div class="hero-summary card">
+          <p class="summary-label">현재 브라우저 저장 현황</p>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <span class="summary-value" id="summaryRecordCount">0</span>
+              <span class="summary-text">저장 결과</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-value" id="summarySubjectCount">0</span>
+              <span class="summary-text">대상자</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-value" id="summaryScaleCount">9</span>
+              <span class="summary-text">척도</span>
+            </div>
+          </div>
+          <p class="hero-status" id="heroStatusText">초기 준비 중입니다.</p>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar card">
+          <div class="sidebar-head">
+            <div>
+              <p class="section-label">척도 목록</p>
+              <h2>검사 선택</h2>
+            </div>
+            <span class="pill" id="questionnaireCount"></span>
+          </div>
+
+          <label class="text-field search-field">
+            <span class="text-label">척도 검색</span>
+            <input id="scaleSearchInput" type="search" placeholder="예: PHQ, CRI, 불면" />
+          </label>
+
+          <nav id="questionnaireNav" class="questionnaire-nav" aria-label="척도 목록"></nav>
+
+          <div class="sidebar-note">
+            <p class="section-label">운영 메모</p>
+            <p>
+              이 버전은 GitHub Pages 공개 배포용입니다. 공동 사용 기록 저장이 필요하면 이후 별도 백엔드나 구글 시트
+              연동을 붙이는 방식으로 확장할 수 있습니다.
+            </p>
+          </div>
+        </aside>
+
+        <section class="main-column">
+          <div class="view-tabs" role="tablist" aria-label="앱 화면 탭">
+            <button class="view-tab is-active" type="button" data-view="screening">검사 입력</button>
+            <button class="view-tab" type="button" data-view="result">결과 요약</button>
+            <button class="view-tab" type="button" data-view="records">저장 결과</button>
+            <button class="view-tab" type="button" data-view="dashboard">비교 분석</button>
+            <button class="view-tab" type="button" data-view="deploy">공개 배포 안내</button>
+          </div>
+
+          <section class="view-pane" data-pane="screening">
+            <article class="card scale-card">
+              <div class="scale-head">
+                <div>
+                  <p id="scaleBadge" class="pill">척도</p>
+                  <h2 id="scaleTitle">척도를 불러오는 중입니다.</h2>
+                  <p id="scaleMeta" class="muted"></p>
+                </div>
+                <div class="progress-panel">
+                  <div class="progress-label-row">
+                    <span>응답 진행률</span>
+                    <strong id="progressLabel">0%</strong>
+                  </div>
+                  <div class="progress-bar" aria-hidden="true">
+                    <div id="progressFill" class="progress-fill"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="source-box">
+                <p class="source-label">출처</p>
+                <p id="scaleSource" class="source-text"></p>
+              </div>
+            </article>
+
+            <form id="screeningForm" class="form-grid" novalidate>
+              <article class="card">
+                <div class="section-head">
+                  <div>
+                    <p class="section-label">검사 기본정보</p>
+                    <h3>검사정보</h3>
+                  </div>
+                  <p class="muted">결과 저장과 비교 분석에 함께 사용됩니다.</p>
+                </div>
+
+                <div class="meta-grid">
+                  <label class="text-field">
+                    <span class="text-label">검사일 *</span>
+                    <input id="sessionDate" type="date" />
+                  </label>
+                  <label class="text-field">
+                    <span class="text-label">담당자</span>
+                    <input id="workerName" type="text" maxlength="40" placeholder="담당자 이름" />
+                  </label>
+                  <label class="text-field">
+                    <span class="text-label">대상자 *</span>
+                    <input id="clientLabel" type="text" maxlength="60" placeholder="대상자 이름 또는 식별명" list="subjectSuggestions" />
+                  </label>
+                  <label class="text-field">
+                    <span class="text-label">생년월일</span>
+                    <input id="birthDate" type="date" />
+                  </label>
+                  <label class="text-field field-wide">
+                    <span class="text-label">비고</span>
+                    <textarea id="sessionNote" rows="2" placeholder="현장 메모 또는 참고 사항"></textarea>
+                  </label>
+                </div>
+
+                <datalist id="subjectSuggestions"></datalist>
+              </article>
+
+              <article class="card">
+                <div class="section-head">
+                  <div>
+                    <p class="section-label">응답자 특성</p>
+                    <h3>응답자 정보</h3>
+                  </div>
+                </div>
+                <div id="respondentFields" class="stack-area"></div>
+              </article>
+
+              <article class="card">
+                <div class="section-head">
+                  <div>
+                    <p class="section-label">문항 응답</p>
+                    <h3 id="questionPromptTitle">문항응답</h3>
+                  </div>
+                  <p id="questionPrompt" class="muted"></p>
+                </div>
+                <div id="questionsRoot" class="question-list"></div>
+              </article>
+
+              <div class="action-row">
+                <button id="calculateBtn" class="btn btn-primary" type="submit">결과 계산</button>
+                <button id="resetBtn" class="btn btn-secondary" type="button">현재 검사 초기화</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="view-pane hidden" data-pane="result">
+            <article class="card result-card">
+              <div class="print-header">
+                <p id="printOrgLine">다시서기종합지원센터 · 정신건강팀</p>
+                <h2 id="printScaleLine">정신건강 척도검사 결과지</h2>
+                <p id="printMetaLine"></p>
+              </div>
+
+              <div id="resultEmpty" class="empty-state">
+                문항 응답을 완료한 뒤 결과 계산을 누르면 결과가 여기에 표시됩니다.
+              </div>
+
+              <div id="resultPanel" class="hidden">
+                <div class="result-hero">
+                  <div>
+                    <p class="section-label">결과 요약</p>
+                    <h3 id="resultTitle">결과 제목</h3>
+                  </div>
+                  <div class="score-box">
+                    <strong id="resultScore">0점</strong>
+                    <span id="resultBand" class="band-chip">참고 구간</span>
+                  </div>
+                </div>
+
+                <div id="resultFlags" class="flag-list"></div>
+
+                <div class="result-grid">
+                  <section class="result-section">
+                    <h4>핵심 포인트</h4>
+                    <ul id="resultHighlights" class="bullet-list"></ul>
+                  </section>
+                  <section class="result-section">
+                    <h4>검사 정보</h4>
+                    <dl id="resultMeta" class="meta-list"></dl>
+                  </section>
+                </div>
+
+                <section class="result-section">
+                  <h4>문항별 응답</h4>
+                  <div id="resultBreakdown" class="breakdown-list"></div>
+                </section>
+
+                <section class="result-section">
+                  <h4>참고 메모</h4>
+                  <ul id="resultNotes" class="bullet-list"></ul>
+                </section>
+
+                <div class="action-row">
+                  <button id="saveResultBtn" class="btn btn-primary" type="button">이 기기에 저장</button>
+                  <button id="printBtn" class="btn btn-secondary" type="button">인쇄</button>
+                  <button id="exportCurrentBtn" class="btn btn-secondary" type="button">결과 파일 저장</button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="view-pane hidden" data-pane="records">
+            <article class="card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">기기 저장 기록</p>
+                  <h3>저장 결과</h3>
+                </div>
+                <div class="inline-actions">
+                  <button id="exportAllJsonBtn" class="btn btn-secondary" type="button">전체 JSON 저장</button>
+                  <button id="exportAllCsvBtn" class="btn btn-secondary" type="button">전체 CSV 저장</button>
+                  <button id="importJsonBtn" class="btn btn-secondary" type="button">기록 불러오기</button>
+                  <button id="clearAllBtn" class="btn btn-danger" type="button">전체 삭제</button>
+                  <input id="importJsonInput" class="hidden" type="file" accept=".json,application/json" />
+                </div>
+              </div>
+
+              <div class="filter-grid">
+                <label class="text-field">
+                  <span class="text-label">대상자 검색</span>
+                  <input id="recordsSearchInput" type="search" placeholder="대상자, 담당자, 척도명 검색" />
+                </label>
+                <label class="text-field">
+                  <span class="text-label">척도 필터</span>
+                  <select id="recordsScaleFilter">
+                    <option value="">전체 척도</option>
+                  </select>
+                </label>
+              </div>
+
+              <p id="recordsStatusText" class="muted">저장된 결과를 불러오는 중입니다.</p>
+
+              <div class="table-wrap">
+                <table class="records-table">
+                  <thead>
+                    <tr>
+                      <th>검사일</th>
+                      <th>대상자</th>
+                      <th>척도</th>
+                      <th>점수</th>
+                      <th>결과</th>
+                      <th>담당자</th>
+                      <th>저장시각</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recordsTableBody"></tbody>
+                </table>
+              </div>
+
+              <div id="recordsEmpty" class="empty-state hidden">저장된 결과가 없습니다.</div>
+            </article>
+          </section>
+
+          <section class="view-pane hidden" data-pane="dashboard">
+            <article class="card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">대상자 비교 분석</p>
+                  <h3>변화 대시보드</h3>
+                </div>
+                <p class="muted">대상자 이름과 생년월일을 기준으로 검사 이력을 묶어서 확인합니다.</p>
+              </div>
+
+              <div class="filter-grid">
+                <label class="text-field">
+                  <span class="text-label">대상자 이름</span>
+                  <input id="dashboardNameInput" type="search" placeholder="예: 홍길동" list="dashboardSubjectSuggestions" />
+                </label>
+                <label class="text-field">
+                  <span class="text-label">생년월일</span>
+                  <input id="dashboardBirthInput" type="date" />
+                </label>
+                <label class="text-field">
+                  <span class="text-label">척도 필터</span>
+                  <select id="dashboardScaleFilter">
+                    <option value="">전체 척도</option>
+                  </select>
+                </label>
+              </div>
+
+              <datalist id="dashboardSubjectSuggestions"></datalist>
+
+              <div class="dashboard-summary" id="dashboardSummary"></div>
+
+              <div class="chart-card">
+                <canvas id="dashboardChart" height="120"></canvas>
+              </div>
+
+              <div class="table-wrap">
+                <table class="records-table">
+                  <thead>
+                    <tr>
+                      <th>검사일</th>
+                      <th>척도</th>
+                      <th>원점수</th>
+                      <th>정규화</th>
+                      <th>결과</th>
+                      <th>담당자</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashboardTableBody"></tbody>
+                </table>
+              </div>
+
+              <div id="dashboardEmpty" class="empty-state">
+                저장 결과가 쌓이면 대상자 이름으로 검사 추이를 조회할 수 있습니다.
+              </div>
+            </article>
+          </section>
+
+          <section class="view-pane hidden" data-pane="deploy">
+            <article class="card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">GitHub Pages</p>
+                  <h3>공개 배포 안내</h3>
+                </div>
+              </div>
+
+              <ol class="guide-list">
+                <li>이 폴더 `github-pages-scale-webapp`를 GitHub Pages 배포 대상으로 사용합니다.</li>
+                <li>저장소 루트의 `.github/workflows/deploy-pages.yml`이 `main` 브랜치 푸시 때 자동 배포합니다.</li>
+                <li>GitHub 저장소 설정의 `Pages`에서 Source를 `GitHub Actions`로 지정하면 공개 주소가 활성화됩니다.</li>
+                <li>이 앱은 서버 없이 브라우저 로컬 저장을 사용하므로, 공동 저장이 필요하면 이후 별도 백엔드 연동이 필요합니다.</li>
+              </ol>
+
+              <div class="deploy-box">
+                <p><strong>배포 준비 파일</strong></p>
+                <ul class="bullet-list">
+                  <li>`github-pages-scale-webapp/index.html`</li>
+                  <li>`github-pages-scale-webapp/styles.css`</li>
+                  <li>`github-pages-scale-webapp/app.js`</li>
+                  <li>`github-pages-scale-webapp/questionnaires-data.js`</li>
+                  <li>`.github/workflows/deploy-pages.yml`</li>
+                </ul>
+              </div>
+            </article>
+          </section>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
