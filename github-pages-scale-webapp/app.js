@@ -7,10 +7,15 @@
     "https://docs.google.com/spreadsheets/d/11y5p7Cp_yN2vggMOlCwn4pKNBEmio-CmkK25Nyd2nIk/edit?gid=0#gid=0";
   const DEFAULT_GOOGLE_SYNC_URL =
     "https://script.google.com/macros/s/AKfycbywbENzL--pd_pLcmJPzWvAKOhzM7SwAkL38Zd7aNldafguQO85N_U2k0v5baUxhr4E/exec";
+  const ADMIN_CREDENTIALS = {
+    username: "admin0109",
+    password: "admin0109"
+  };
   const STORAGE_KEYS = {
     records: "mindmap_scale_records_v1",
     worker: "mindmap_scale_worker_v1",
-    googleSync: "mindmap_scale_google_sync_v2"
+    googleSync: "mindmap_scale_google_sync_v2",
+    adminSession: "mindmap_scale_admin_session_v1"
   };
   const SAMPLE_RECORDS_VERSION = "2026-03-27-sample-v1";
   const SCALE_COLORS = [
@@ -39,7 +44,8 @@
       webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
       syncToken: "",
       syncEnabled: false
-    }
+    },
+    adminAuthenticated: false
   };
 
   const ui = {};
@@ -51,6 +57,7 @@
     bindEvents();
     loadBundle();
     loadSyncSettings();
+    loadAdminSession();
     restoreWorkerName();
     if (!ui.sessionDate.value) {
       ui.sessionDate.value = new Date().toISOString().slice(0, 10);
@@ -109,6 +116,13 @@
     ui.syncQuestionnairesBtn = document.getElementById("syncQuestionnairesBtn");
     ui.checkSyncStatusBtn = document.getElementById("checkSyncStatusBtn");
     ui.syncStatusText = document.getElementById("syncStatusText");
+    ui.manageLocked = document.getElementById("manageLocked");
+    ui.manageUnlocked = document.getElementById("manageUnlocked");
+    ui.adminUsername = document.getElementById("adminUsername");
+    ui.adminPassword = document.getElementById("adminPassword");
+    ui.adminLoginBtn = document.getElementById("adminLoginBtn");
+    ui.adminLogoutBtn = document.getElementById("adminLogoutBtn");
+    ui.adminAuthStatus = document.getElementById("adminAuthStatus");
   }
 
   function bindEvents() {
@@ -142,6 +156,73 @@
     ui.syncCurrentBtn.addEventListener("click", onSyncCurrentResult);
     ui.syncQuestionnairesBtn.addEventListener("click", onSyncQuestionnaires);
     ui.checkSyncStatusBtn.addEventListener("click", onCheckSyncStatus);
+    ui.adminLoginBtn.addEventListener("click", onAdminLogin);
+    ui.adminLogoutBtn.addEventListener("click", onAdminLogout);
+    ui.adminPassword.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onAdminLogin();
+      }
+    });
+  }
+
+  function loadAdminSession() {
+    state.adminAuthenticated = sessionStorage.getItem(STORAGE_KEYS.adminSession) === "1";
+    syncManageAccess();
+  }
+
+  function syncManageAccess() {
+    if (ui.manageLocked) {
+      ui.manageLocked.classList.toggle("hidden", state.adminAuthenticated);
+    }
+    if (ui.manageUnlocked) {
+      ui.manageUnlocked.classList.toggle("hidden", !state.adminAuthenticated);
+    }
+    if (ui.adminAuthStatus) {
+      ui.adminAuthStatus.classList.remove("success", "error");
+      ui.adminAuthStatus.textContent = state.adminAuthenticated
+        ? "관리자 인증이 완료되었습니다."
+        : "관리자 계정으로 로그인하면 시트 연동 정보와 운영 설정을 볼 수 있습니다.";
+    }
+  }
+
+  function onAdminLogin() {
+    const username = String(ui.adminUsername?.value || "").trim();
+    const password = String(ui.adminPassword?.value || "").trim();
+
+    if (username !== ADMIN_CREDENTIALS.username || password !== ADMIN_CREDENTIALS.password) {
+      state.adminAuthenticated = false;
+      sessionStorage.removeItem(STORAGE_KEYS.adminSession);
+      syncManageAccess();
+      if (ui.adminAuthStatus) {
+        ui.adminAuthStatus.textContent = "관리자 아이디 또는 비밀번호가 올바르지 않습니다.";
+        ui.adminAuthStatus.classList.add("error");
+      }
+      return;
+    }
+
+    state.adminAuthenticated = true;
+    sessionStorage.setItem(STORAGE_KEYS.adminSession, "1");
+    if (ui.adminPassword) {
+      ui.adminPassword.value = "";
+    }
+    syncManageAccess();
+    setSyncStatus("관리자 인증이 완료되었습니다. 관리 탭에서 연동 설정을 확인할 수 있습니다.", "success");
+  }
+
+  function onAdminLogout() {
+    state.adminAuthenticated = false;
+    sessionStorage.removeItem(STORAGE_KEYS.adminSession);
+    if (ui.adminUsername) {
+      ui.adminUsername.value = "";
+    }
+    if (ui.adminPassword) {
+      ui.adminPassword.value = "";
+    }
+    syncManageAccess();
+    if (state.activeView === "manage") {
+      setActiveView("screening");
+    }
   }
 
   function loadBundle() {
@@ -277,7 +358,7 @@
   }
 
   function syncSheetControls() {
-    const enabled = Boolean(state.syncSettings.syncEnabled);
+    const enabled = Boolean(state.syncSettings.syncEnabled) && Boolean(state.adminAuthenticated);
     [
       ui.syncCurrentBtn,
       ui.syncQuestionnairesBtn,
@@ -287,6 +368,10 @@
         button.disabled = !enabled;
       }
     });
+    if (!state.adminAuthenticated) {
+      setSyncStatus("관리자 인증 후에만 구글 시트 연동 설정과 전송 기능을 사용할 수 있습니다.");
+      return;
+    }
     if (!enabled) {
       setSyncStatus("시트 기능 사용이 꺼져 있습니다. 일반 사용자는 검사와 기기 저장만 사용할 수 있습니다.");
     }

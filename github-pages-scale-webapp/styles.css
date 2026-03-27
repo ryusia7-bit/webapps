@@ -485,6 +485,19 @@ button {
   background: linear-gradient(135deg, rgba(15, 107, 88, 0.08), rgba(255, 255, 255, 0.94));
 }
 
+.manage-auth-box,
+#manageUnlocked {
+  display: grid;
+  gap: 16px;
+}
+
+.manage-auth-box {
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(20, 49, 39, 0.12);
+  background: linear-gradient(135deg, rgba(15, 107, 88, 0.08), rgba(255, 255, 255, 0.94));
+}
+
 .question-section-label {
   margin: 18px 0 4px;
   font-size: 1rem;
