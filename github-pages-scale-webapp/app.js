@@ -50,8 +50,6 @@
     cacheUi();
     bindEvents();
     loadBundle();
-    loadSavedRecords();
-    ensureBundledSampleRecords();
     loadSyncSettings();
     restoreWorkerName();
     if (!ui.sessionDate.value) {
@@ -60,7 +58,6 @@
     renderScaleFilters();
     renderQuestionnaireNav();
     setCurrentQuestionnaire(state.manifest[0]?.id || null);
-    renderRecordsTable();
   }
 
   function cacheUi() {
@@ -103,24 +100,12 @@
     ui.saveResultBtn = document.getElementById("saveResultBtn");
     ui.printBtn = document.getElementById("printBtn");
     ui.exportCurrentBtn = document.getElementById("exportCurrentBtn");
-    ui.recordsSearchInput = document.getElementById("recordsSearchInput");
-    ui.recordsScaleFilter = document.getElementById("recordsScaleFilter");
-    ui.recordsStatusText = document.getElementById("recordsStatusText");
-    ui.recordsTableBody = document.getElementById("recordsTableBody");
-    ui.recordsEmpty = document.getElementById("recordsEmpty");
-    ui.exportAllJsonBtn = document.getElementById("exportAllJsonBtn");
-    ui.exportAllCsvBtn = document.getElementById("exportAllCsvBtn");
-    ui.syncAllRecordsBtn = document.getElementById("syncAllRecordsBtn");
-    ui.importJsonBtn = document.getElementById("importJsonBtn");
-    ui.importJsonInput = document.getElementById("importJsonInput");
-    ui.clearAllBtn = document.getElementById("clearAllBtn");
     ui.googleSyncUrl = document.getElementById("googleSyncUrl");
     ui.googleSyncToken = document.getElementById("googleSyncToken");
     ui.googleSyncEnabled = document.getElementById("googleSyncEnabled");
     ui.openAuthorizeBtn = document.getElementById("openAuthorizeBtn");
     ui.openSheetBtn = document.getElementById("openSheetBtn");
     ui.syncCurrentBtn = document.getElementById("syncCurrentBtn");
-    ui.syncHistoryBtn = document.getElementById("syncHistoryBtn");
     ui.syncQuestionnairesBtn = document.getElementById("syncQuestionnairesBtn");
     ui.checkSyncStatusBtn = document.getElementById("checkSyncStatusBtn");
     ui.syncStatusText = document.getElementById("syncStatusText");
@@ -128,7 +113,6 @@
 
   function bindEvents() {
     const debouncedScaleSearch = debounce(() => renderQuestionnaireNav(ui.scaleSearchInput.value), 90);
-    const debouncedRecordsRender = debounce(() => renderRecordsTable(), 120);
 
     ui.scaleSearchInput.addEventListener("input", debouncedScaleSearch);
     ui.tabs.forEach((tab) => {
@@ -144,28 +128,18 @@
     ui.screeningForm.addEventListener("change", onFormChanged);
     ui.screeningForm.addEventListener("input", onFormInput);
     ui.resetBtn.addEventListener("click", onResetCurrentForm);
-    ui.saveResultBtn.addEventListener("click", onSaveResult);
+    ui.saveResultBtn.addEventListener("click", onSyncCurrentResult);
     ui.printBtn.addEventListener("click", () => window.print());
     ui.exportCurrentBtn.addEventListener("click", onExportCurrentRecord);
     ui.workerName.addEventListener("input", () => {
       localStorage.setItem(STORAGE_KEYS.worker, ui.workerName.value.trim());
     });
-    ui.recordsSearchInput.addEventListener("input", debouncedRecordsRender);
-    ui.recordsScaleFilter.addEventListener("change", renderRecordsTable);
-    ui.recordsTableBody.addEventListener("click", onRecordsTableClick);
-    ui.exportAllJsonBtn.addEventListener("click", exportAllRecordsAsJson);
-    ui.exportAllCsvBtn.addEventListener("click", exportAllRecordsAsCsv);
-    ui.syncAllRecordsBtn.addEventListener("click", onSyncAllRecords);
-    ui.importJsonBtn.addEventListener("click", () => ui.importJsonInput.click());
-    ui.importJsonInput.addEventListener("change", onImportJson);
-    ui.clearAllBtn.addEventListener("click", onClearAllRecords);
     ui.googleSyncUrl.addEventListener("input", onGoogleSyncSettingsInput);
     ui.googleSyncToken.addEventListener("input", onGoogleSyncSettingsInput);
     ui.googleSyncEnabled.addEventListener("change", onGoogleSyncSettingsInput);
     ui.openAuthorizeBtn.addEventListener("click", onOpenAuthorizePage);
     ui.openSheetBtn.addEventListener("click", () => window.open(GOOGLE_SHEET_URL, "_blank", "noopener"));
     ui.syncCurrentBtn.addEventListener("click", onSyncCurrentResult);
-    ui.syncHistoryBtn.addEventListener("click", onSyncAllRecords);
     ui.syncQuestionnairesBtn.addEventListener("click", onSyncQuestionnaires);
     ui.checkSyncStatusBtn.addEventListener("click", onCheckSyncStatus);
   }
@@ -306,7 +280,6 @@
     const enabled = Boolean(state.syncSettings.syncEnabled);
     [
       ui.syncCurrentBtn,
-      ui.syncHistoryBtn,
       ui.syncQuestionnairesBtn,
       ui.checkSyncStatusBtn
     ].forEach((button) => {
@@ -393,9 +366,7 @@
   function setSyncBusy(isBusy, message = "") {
     [
       ui.saveResultBtn,
-      ui.syncAllRecordsBtn,
       ui.syncCurrentBtn,
-      ui.syncHistoryBtn,
       ui.syncQuestionnairesBtn,
       ui.checkSyncStatusBtn
     ].forEach((button) => {
@@ -410,7 +381,7 @@
   }
 
   function renderScaleFilters() {
-    [ui.recordsScaleFilter].filter(Boolean).forEach((select) => {
+    [].forEach((select) => {
       select.innerHTML = '<option value="">전체 척도</option>';
       state.manifest.forEach((item) => {
         const option = document.createElement("option");
@@ -1135,37 +1106,6 @@
     ui.resultMeta.innerHTML = "";
     ui.resultBreakdown.innerHTML = "";
     ui.resultNotes.innerHTML = "";
-  }
-
-  async function onSaveResult() {
-    if (!state.lastResult) {
-      alert("먼저 결과를 계산해주세요.");
-      return;
-    }
-
-    saveRecordToDevice(state.lastResult);
-    let remoteMessage = "";
-
-    if (state.syncSettings.syncEnabled && state.syncSettings.webAppUrl) {
-      const synced = await syncSingleRecordToGoogleSheets(state.lastResult, "current_result", false);
-      remoteMessage = synced ? " 구글 시트 DB에도 전송했습니다." : " 구글 시트 DB 전송은 실패했습니다.";
-    }
-
-    setActiveView("records");
-    setHeroStatus(`${state.lastResult.meta?.clientLabel || "대상자"} 결과를 저장했습니다.${remoteMessage}`);
-  }
-
-  function saveRecordToDevice(record) {
-    if (!record) {
-      return;
-    }
-
-    const existingIndex = state.records.findIndex((entry) => entry.id === record.id);
-    if (existingIndex >= 0) {
-      state.records.splice(existingIndex, 1);
-    }
-    state.records.unshift(structuredCloneSafe(record));
-    persistRecords();
   }
 
   function onExportCurrentRecord() {
