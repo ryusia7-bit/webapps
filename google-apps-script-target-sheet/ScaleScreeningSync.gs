@@ -173,7 +173,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
-const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v5";
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v6";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
 
 function setupScaleScreeningSyncSheets() {
@@ -1353,6 +1353,9 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const hiddenColumnsEnd = Number(dashboardConfig.hiddenColumnsEnd || dashboardConfig.namesHelperColumn || 40);
   const hiddenColumnCount = Math.max(1, hiddenColumnsEnd - dashboardConfig.trendStartColumn + 1);
   const chartEndColumnLetter = columnToLetterScale_(hiddenColumnsEnd);
+  const birthFilterFormula = 'IF($E$4="",' +
+    workerSheetRef + '!A2:A<>"",' +
+    'TEXT(' + workerSheetRef + '!C2:C,"yyyy-mm-dd")=TEXT($E$4,"yyyy-mm-dd"))';
   const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
@@ -1366,7 +1369,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     workerSheetRef + '!L2:L' +
     "}," +
     workerSheetRef + '!B2:B=$B$4,' +
-    "IF($E$4=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,\"yyyy-mm-dd\"))' +
+    birthFilterFormula +
     "),1,TRUE),{\"검색 결과가 없습니다.\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\"}))";
   const trendFormula = "=IF($B$4=\"\",\"\",IFERROR(QUERY(FILTER({" +
     workerSheetRef + '!A2:A,' +
@@ -1376,7 +1379,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     workerSheetRef + '!C2:C' +
     "}," +
     workerSheetRef + '!B2:B=$B$4,' +
-    "IF($E$4=\"\"," + workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,\"yyyy-mm-dd\"))' +
+    birthFilterFormula +
     "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
 
   sheet.clear();
@@ -1390,10 +1393,10 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange("B4:C4").merge();
   sheet.getRange("E4:F4").merge();
   sheet.getRange("G4:L5").merge().setValue("동명이인은 생년월일을 함께 입력하면 정확한 비교가 가능합니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
-  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))))&"건","0건"))');
-  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),1,FALSE),1,1),"-"))');
-  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd")),' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
-  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),"<>")&"건","0건"))');
+  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '))&"건","0건"))');
+  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
+  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + ',' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
+  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '),"<>")&"건","0건"))');
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
   sheet.getRange(trendHeaderCell).setValue("점수 변화 그래프 데이터");
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
