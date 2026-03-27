@@ -1386,22 +1386,17 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const clientNameRange = sheet.getRange(dashboardConfig.clientNameCell);
   clientNameRange.clearDataValidations();
   clientNameRange.clearContent();
+  clientNameRange.setNote("대상자 이름을 자유롭게 입력하세요. 없는 이름이면 검색 결과가 없다고 표시됩니다.");
   sheet.getRange("B4:F4").setBackground("#ffffff");
   sheet.getRange(namesHelperLetter + "2")
     .setFormula(`=ARRAYFORMULA(SORT(UNIQUE(FILTER(${workerSheetRef}!B2:B,${workerSheetRef}!B2:B<>"",NOT(REGEXMATCH(${workerSheetRef}!B2:B,"^\\d+(?:\\.\\d+)?$"))))))`);
-
-  const nameValidation = SpreadsheetApp.newDataValidation()
-    .requireValueInRange(sheet.getRange(namesHelperLetter + "2:" + namesHelperLetter), true)
-    .setAllowInvalid(true)
-    .build();
-  clientNameRange.setDataValidation(nameValidation);
 
   SpreadsheetApp.flush();
   const candidateNames = sheet.getRange(namesHelperLetter + "2:" + namesHelperLetter + "40").getDisplayValues()
     .map(function(row) { return normalizeText_(row[0]); })
     .filter(Boolean);
   const selectedClientName = (
-    previousClientName && candidateNames.indexOf(previousClientName) !== -1
+    previousClientName
       ? previousClientName
       : candidateNames.filter(function(name) { return name === "송지훈"; })[0] || candidateNames[0] || previousClientName
   );
