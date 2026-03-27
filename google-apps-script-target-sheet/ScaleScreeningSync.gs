@@ -173,7 +173,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
-const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v6";
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v7";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
 
 function setupScaleScreeningSyncSheets() {
@@ -327,6 +327,14 @@ function doGet(e) {
       return buildScaleScreeningAuthorizePage_();
     }
 
+    if (action === "builddashboard" || action === "build_dashboard") {
+      return createScaleScreeningJsonOutput_(Object.assign({ ok: true }, buildDashboard()), callbackName);
+    }
+
+    if (action === "dashboardsnapshot" || action === "dashboard_snapshot") {
+      return createScaleScreeningJsonOutput_(Object.assign({ ok: true }, getDashboardSnapshot()), callbackName);
+    }
+
     validateScaleScreeningSyncToken_(params.token);
 
     if (action === "searchrecords" || action === "search_records" || action === "search") {
@@ -357,6 +365,9 @@ function doGet(e) {
 
 function buildScaleScreeningAuthorizePage_() {
   try {
+    ensureScaleScreeningWorkspaceSchema_();
+    applyScaleScreeningDisplayFormats_();
+    invalidateScaleScreeningSyncCache_();
     const spreadsheet = getScaleScreeningTargetSpreadsheet_();
     const html = [
       "<!doctype html>",
@@ -1219,7 +1230,7 @@ function buildScaleScreeningWorkspace_() {
 
   buildScaleScreeningWorkerViewSheet_(workerViewSheet);
   buildScaleScreeningRiskViewSheet_(riskViewSheet);
-  buildScaleScreeningDashboardSheet_(dashboardSheet);
+  buildDashboard_(dashboardSheet);
   buildScaleScreeningSettingsSheet_(settingsSheet);
 
   console.timeEnd("buildScaleScreeningWorkspace");
@@ -1425,6 +1436,8 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   setScaleColumnWidths_(sheet, [95, 140, 85, 105, 120, 105, 105, 180, 140, 160, 90, 90, 90, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95]);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
   sheet.getRange("D:D").setNumberFormat("0.0");
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + ":" + columnToLetterScale_(dashboardConfig.trendStartColumn))
+    .setNumberFormat("yyyy-mm-dd");
   sheet.getRange("A" + String(detailHeaderRow) + ":J320").setFontSize(10).setVerticalAlignment("middle");
   sheet.setRowHeights(1, 1, 34);
   sheet.setRowHeights(2, 1, 26);
@@ -1479,7 +1492,6 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .setPosition(dashboardConfig.chartAnchorRow, dashboardConfig.chartAnchorColumn, 0, 0)
     .build();
   sheet.insertChart(chart);
-  sheet.hideColumns(dashboardConfig.trendStartColumn, hiddenColumnCount);
   sheet.hideColumns(dashboardConfig.namesHelperColumn, 1);
 }
 
