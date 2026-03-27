@@ -1443,6 +1443,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .asLineChart()
     .addRange(chartRange)
     .setNumHeaders(1)
+    .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.SHOW_BOTH)
     .setOption("title", "검사일별 척도 변화")
     .setOption("legend", { position: "top", textStyle: { fontSize: 11, color: "#344054" } })
     .setOption("hAxis", {
