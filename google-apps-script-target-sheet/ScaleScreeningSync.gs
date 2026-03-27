@@ -1388,8 +1388,12 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange("G4:L5").merge().setValue("대상자 이름만 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
   sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4))&"건","0건"))');
   sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
-  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,' + workerSheetRef + '!F2:F<>"')),1),"0.0"),"-"))');
-  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4),"<>")&"건","0건"))');
+  sheet.getRange("G7:I9").merge().setFormula(
+    `=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(${workerSheetRef}!F2:F,${workerSheetRef}!B2:B=$B$4,${workerSheetRef}!F2:F<>"")),1),"0.0"),"-"))`
+  );
+  sheet.getRange("J7:L9").merge().setFormula(
+    `=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(${workerSheetRef}!K2:K,${workerSheetRef}!B2:B=$B$4),"<>")&"건","0건"))`
+  );
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
   sheet.getRange(trendHeaderCell).setValue("점수 변화 그래프 데이터");
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
@@ -1399,7 +1403,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange("A" + String(detailStartRow)).setFormula(detailFormula);
   sheet.getRange(trendFormulaCell).setFormula(trendFormula);
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
-    .setFormula('=ARRAYFORMULA(SORT(UNIQUE(FILTER(' + workerSheetRef + '!B2:B,' + workerSheetRef + '!B2:B<>""))))');
+    .setFormula(`=ARRAYFORMULA(SORT(UNIQUE(FILTER(${workerSheetRef}!B2:B,${workerSheetRef}!B2:B<>""))))`);
 
   const nameValidation = SpreadsheetApp.newDataValidation()
     .requireValueInRange(sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2:" + columnToLetterScale_(dashboardConfig.namesHelperColumn)), true)
