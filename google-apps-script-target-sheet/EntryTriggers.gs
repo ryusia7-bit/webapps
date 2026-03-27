@@ -2,6 +2,12 @@ function onOpen() {
   addCustomMenu();
 
   try {
+    ensureScaleScreeningWorkspaceSchema_();
+  } catch (error) {
+    console.error("척도검사 대시보드 자동 갱신 실패:", error);
+  }
+
+  try {
     bootstrapCounselingAiOnOpen_();
   } catch (error) {
     console.error("AI 상담기록 자동 준비 실패:", error);

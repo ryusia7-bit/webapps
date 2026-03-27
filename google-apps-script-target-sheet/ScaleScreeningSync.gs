@@ -149,13 +149,14 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   dashboard: {
     clientNameCell: "B4",
     birthDateCell: "E4",
-    namesHelperColumn: 27,
-    detailHeaderRow: 13,
-    detailStartRow: 14,
-    trendStartRow: 13,
-    trendStartColumn: 14,
-    chartAnchorRow: 6,
-    chartAnchorColumn: 12
+    namesHelperColumn: 40,
+    detailHeaderRow: 31,
+    detailStartRow: 32,
+    trendStartRow: 2,
+    trendStartColumn: 28,
+    chartAnchorRow: 11,
+    chartAnchorColumn: 1,
+    hiddenColumnsEnd: 52
   },
   settingsRows: [
     ["항목", "값", "설명"],
@@ -172,7 +173,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
-const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v4";
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v5";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
 
 function setupScaleScreeningSyncSheets() {
@@ -1349,6 +1350,9 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const detailStartRow = dashboardConfig.detailStartRow;
   const trendHeaderCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(detailHeaderRow);
   const trendFormulaCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow);
+  const hiddenColumnsEnd = Number(dashboardConfig.hiddenColumnsEnd || dashboardConfig.namesHelperColumn || 40);
+  const hiddenColumnCount = Math.max(1, hiddenColumnsEnd - dashboardConfig.trendStartColumn + 1);
+  const chartEndColumnLetter = columnToLetterScale_(hiddenColumnsEnd);
   const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
@@ -1376,7 +1380,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
 
   sheet.clear();
-  ensureSheetSize_(sheet, 320, 35);
+  ensureSheetSize_(sheet, 320, hiddenColumnsEnd);
   sheet.setHiddenGridlines(true);
 
   sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
@@ -1409,15 +1413,14 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .build();
   sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
 
-  sheet.setFrozenRows(detailHeaderRow);
-  sheet.hideColumns(dashboardConfig.namesHelperColumn, 35 - dashboardConfig.namesHelperColumn + 1);
+  sheet.setFrozenRows(10);
   sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
   sheet.getRange("A2:L2").setFontColor("#4f5b52").setFontSize(10).setBackground("#eef6f1");
   sheet.getRange("A4:F4").setFontWeight("bold").setBackground("#eef6f1");
   sheet.getRange("G4:L5").setBackground("#f8fbf9").setFontColor("#4f5b52").setWrap(true);
   sheet.getRange("A4:L5").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
   styleHeaderRow_(sheet, detailHeaderRow, 10);
-  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(detailHeaderRow) + ":Z" + String(detailHeaderRow)).setFontWeight("bold").setBackground("#fff2cc");
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + String(dashboardConfig.trendStartRow)).setFontWeight("bold").setBackground("#fff2cc");
   styleScaleDashboardCards_(sheet);
   applyScaleBanding_(sheet.getRange(detailHeaderRow, 1, Math.max(sheet.getMaxRows() - detailHeaderRow + 1, 2), 10));
   applyScaleDashboardRules_(sheet);
@@ -1429,6 +1432,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.setRowHeights(2, 1, 26);
   sheet.setRowHeights(4, 2, 28);
   sheet.setRowHeights(7, 3, 28);
+  sheet.setRowHeights(11, 18, 24);
   sheet.setRowHeights(detailHeaderRow, 1, 24);
 
   const charts = sheet.getCharts();
@@ -1436,17 +1440,18 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     sheet.removeChart(chart);
   });
 
-  const chartRange = sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":Z320");
+  const chartRange = sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + "320");
   const chart = sheet.newChart()
     .asLineChart()
     .addRange(chartRange)
     .setNumHeaders(1)
     .setOption("title", "검사일별 척도 변화")
-    .setOption("legend", { position: "right", textStyle: { fontSize: 10 } })
+    .setOption("legend", { position: "top", textStyle: { fontSize: 11, color: "#344054" } })
     .setOption("hAxis", {
       title: "검사일",
       slantedText: true,
       slantedTextAngle: 30,
+      format: "yyyy-MM-dd",
       textStyle: { fontSize: 10, color: "#475467" }
     })
     .setOption("vAxis", {
@@ -1456,10 +1461,11 @@ function buildScaleScreeningDashboardSheet_(sheet) {
       textStyle: { fontSize: 10, color: "#475467" }
     })
     .setOption("curveType", "function")
-    .setOption("lineWidth", 4)
-    .setOption("pointSize", 7)
-    .setOption("chartArea", { left: 70, top: 42, width: "62%", height: "70%" })
+    .setOption("lineWidth", 3)
+    .setOption("pointSize", 6)
+    .setOption("chartArea", { left: 60, top: 56, width: "82%", height: "68%" })
     .setOption("backgroundColor", "#ffffff")
+    .setOption("explorer", { actions: ["dragToZoom", "rightClickToReset"] })
     .setOption("series", {
       0: { color: "#3b82f6" },
       1: { color: "#f59e0b" },
@@ -1474,6 +1480,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .setPosition(dashboardConfig.chartAnchorRow, dashboardConfig.chartAnchorColumn, 0, 0)
     .build();
   sheet.insertChart(chart);
+  sheet.hideColumns(dashboardConfig.trendStartColumn, hiddenColumnCount);
 }
 
 function setScaleColumnWidths_(sheet, widths) {
@@ -1563,36 +1570,40 @@ function applyScaleRiskViewRules_(sheet) {
 }
 
 function applyScaleDashboardRules_(sheet) {
+  const detailStartRow = SCALE_SCREENING_SYNC_CONFIG.dashboard.detailStartRow;
+  const scoreRange = "D" + String(detailStartRow) + ":D";
+  const fullRange = "A" + String(detailStartRow) + ":J";
+  const warningFormula = '=LEN($I' + String(detailStartRow) + ')>0';
   const rules = [
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberGreaterThanOrEqualTo(80)
       .setBackground("#fdecec")
       .setFontColor("#b42318")
-      .setRanges([sheet.getRange("D14:D")])
+      .setRanges([sheet.getRange(scoreRange)])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberBetween(60, 79.9999)
       .setBackground("#fff4e5")
       .setFontColor("#b54708")
-      .setRanges([sheet.getRange("D14:D")])
+      .setRanges([sheet.getRange(scoreRange)])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberBetween(30, 59.9999)
       .setBackground("#fff9db")
       .setFontColor("#9a6700")
-      .setRanges([sheet.getRange("D14:D")])
+      .setRanges([sheet.getRange(scoreRange)])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberLessThan(30)
       .setBackground("#ecfdf3")
       .setFontColor("#027a48")
-      .setRanges([sheet.getRange("D14:D")])
+      .setRanges([sheet.getRange(scoreRange)])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=LEN($I14)>0')
+      .whenFormulaSatisfied(warningFormula)
       .setBackground("#fdecec")
       .setFontColor("#b42318")
-      .setRanges([sheet.getRange("A14:J")])
+      .setRanges([sheet.getRange(fullRange)])
       .build()
   ];
   sheet.setConditionalFormatRules(rules);
