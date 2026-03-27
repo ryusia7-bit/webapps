@@ -119,9 +119,8 @@ function repairScaleDashboardSummaryCards_(sheet) {
   const scaleCount = rows.length
     ? new Set(rows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
     : 0;
-
-  sheet.getRange("A7:C9").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
-  sheet.getRange("D7:F9").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
-  sheet.getRange("G7:I9").setValue("평균 정규화점수\n" + averageNormalizedScore);
-  sheet.getRange("J7:L9").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
+  sheet.getRange("G8:I10").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
+  sheet.getRange("J8:L10").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
+  sheet.getRange("G11:I13").setValue("평균 정규화점수\n" + averageNormalizedScore);
+  sheet.getRange("J11:L13").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
 }

@@ -28,6 +28,16 @@ function onEdit(e) {
   }
 }
 
+function onSelectionChange(e) {
+  try {
+    if (handleScaleDashboardSelectionChange_(e)) {
+      return;
+    }
+  } catch (error) {
+    console.error("척도대시보드 선택 처리 실패:", error);
+  }
+}
+
 function handleScaleDashboardEdit_(e) {
   if (!e || !e.range) {
     return false;
@@ -39,7 +49,7 @@ function handleScaleDashboardEdit_(e) {
     return false;
   }
 
-  if (editedRange.getA1Notation() !== SCALE_SCREENING_SYNC_CONFIG.dashboard.clientNameCell) {
+  if (editedRange.getA1Notation() !== SCALE_SCREENING_SYNC_CONFIG.dashboard.searchInputCell) {
     return false;
   }
 

@@ -147,10 +147,16 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     "기록고유값"
   ],
   dashboard: {
-    clientNameCell: "B4",
+    searchInputCell: "B4",
+    clientNameCell: "B6",
+    candidateHeaderRow: 8,
+    candidateStartRow: 9,
+    candidateRowCount: 6,
+    candidateStartColumn: 1,
+    candidateColumnCount: 6,
     namesHelperColumn: 28,
-    detailHeaderRow: 12,
-    detailStartRow: 13,
+    detailHeaderRow: 16,
+    detailStartRow: 17,
     trendStartRow: 2,
     trendStartColumn: 14,
     chartAnchorRow: 12,
@@ -167,7 +173,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     ["척도 마스터 시트", "척도마스터", "척도 메타데이터 시트"],
     ["문항 마스터 시트", "척도문항마스터", "문항 정의 시트"],
     ["선택지 마스터 시트", "척도선택지마스터", "선택지 정의 시트"],
-    ["검색 사용법", "드롭다운 선택", "척도대시보드 B4의 드롭다운에서 대상자와 생년월일을 선택하면 종단현황 표가 갱신됩니다."],
+    ["검색 사용법", "검색 후 클릭 선택", "척도대시보드 B4에 이름을 입력하면 후보 목록이 나타나고, 목록 셀을 클릭하면 종단현황 표가 갱신됩니다."],
     ["검색 기준", "이름 + 생년월일", "현재 척도대시보드는 대상자 이름과 생년월일 조합으로 비교합니다."]
   ]
 };
@@ -1459,91 +1465,88 @@ function buildScaleScreeningSettingsSheet_(sheet) {
 }
 
 function buildScaleScreeningDashboardSheet_(sheet) {
-  const workerSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningWorkerViewSheetName_());
   const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
   const detailHeaderRow = dashboardConfig.detailHeaderRow;
-  const detailStartRow = dashboardConfig.detailStartRow;
   const helperStartColumn = dashboardConfig.trendStartColumn;
-  const namesHelperLetter = columnToLetterScale_(dashboardConfig.namesHelperColumn);
+  const searchInputCell = dashboardConfig.searchInputCell;
+  const selectedClientCell = dashboardConfig.clientNameCell;
+  const candidateHeaderRow = dashboardConfig.candidateHeaderRow;
+  const candidateStartRow = dashboardConfig.candidateStartRow;
+  const candidateRowCount = dashboardConfig.candidateRowCount;
   const previousClientSelection = normalizeText_(sheet.getRange(dashboardConfig.clientNameCell).getDisplayValue());
-  const clientSelectionFormula = `${workerSheetRef}!B2:B&IF(${workerSheetRef}!C2:C="",""," ("&${workerSheetRef}!C2:C&")")`;
+  const previousSearchText = normalizeText_(sheet.getRange(searchInputCell).getDisplayValue());
 
   sheet.clear();
   ensureSheetSize_(sheet, 220, Math.max(12, dashboardConfig.namesHelperColumn));
   sheet.setHiddenGridlines(true);
 
   sheet.getRange("A1:L1").merge().setValue("대상자별 척도 종단현황");
-  sheet.getRange("A2:L2").merge().setValue("대상자와 생년월일을 드롭다운에서 선택하면 검사일 순으로 척도별 점수와 직전 검사 대비 증감을 한눈에 확인할 수 있습니다.");
-  sheet.getRange("A4").setValue("대상자 선택");
+  sheet.getRange("A2:L2").merge().setValue("대상자 이름을 입력하면 후보 목록이 나타납니다. 후보 행을 클릭하면 검사일 순으로 척도별 점수와 직전 검사 대비 증감을 한눈에 확인할 수 있습니다.");
+  sheet.getRange("A4").setValue("대상자 검색");
   sheet.getRange("B4:F4").merge();
-  sheet.getRange("G4:L5").merge().setValue("드롭다운에서 대상자와 생년월일을 선택하세요. 아래 종단현황 표는 척도별로 묶은 뒤 각 척도 안에서 검사일 오름차순으로 정렬되며, 직전 검사 대비 증감과 변화 방향을 함께 보여줍니다.");
-  sheet.getRange("A7:C9").merge().setValue("검사 건수\n-");
-  sheet.getRange("D7:F9").merge().setValue("최근 검사일\n-");
-  sheet.getRange("G7:I9").merge().setValue("평균 정규화점수\n-");
-  sheet.getRange("J7:L9").merge().setValue("검사 척도 수\n-");
+  sheet.getRange("G4:L4").merge().setValue("이름 일부만 입력해도 후보가 나타납니다. 동명이인은 생년월일로 구분되고, 목록의 아무 셀이나 클릭하면 대상자가 선택됩니다.");
+  sheet.getRange("A6").setValue("선택된 대상자");
+  sheet.getRange("B6:F6").merge();
+  sheet.getRange("G6:L6").merge().setValue("후보 목록 클릭으로 대상자를 선택하세요. 아래 종단현황 표는 척도별로 묶은 뒤 각 척도 안에서 검사일 오름차순으로 정렬되며, 직전 검사 대비 증감과 변화 방향을 함께 보여줍니다.");
+  sheet.getRange("G8:I10").merge().setValue("검사 건수\n-");
+  sheet.getRange("J8:L10").merge().setValue("최근 검사일\n-");
+  sheet.getRange("G11:I13").merge().setValue("평균 정규화점수\n-");
+  sheet.getRange("J11:L13").merge().setValue("검사 척도 수\n-");
+  sheet.getRange("A" + String(candidateHeaderRow) + ":F" + String(candidateHeaderRow)).setValues([["대상자", "생년월일", "최근 검사일", "최근 척도", "검사 건수", "선택"]]);
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "직전점수", "증감", "변화", "결과구간", "담당자", "비고"]]);
-  sheet.getRange("A11:L11").merge().setValue("검사별 종단현황");
-  sheet.getRange(namesHelperLetter + "1").setValue("대상자 목록");
+  sheet.getRange("A15:L15").merge().setValue("검사별 종단현황");
 
-  const clientNameRange = sheet.getRange(dashboardConfig.clientNameCell);
-  const clientNameMergedRange = sheet.getRange("B4:F4");
+  const searchInputRange = sheet.getRange(searchInputCell);
+  const searchInputMergedRange = sheet.getRange("B4:F4");
+  const selectedClientRange = sheet.getRange(selectedClientCell);
+  const selectedClientMergedRange = sheet.getRange("B6:F6");
   const workerSheet = getScaleScreeningTargetSpreadsheet_().getSheetByName(getScaleScreeningWorkerViewSheetName_());
-  const candidateSelections = getScaleScreeningDashboardClientSelections_(workerSheet);
-  const helperRowCount = Math.max(candidateSelections.length, 1);
-  const helperRange = sheet.getRange(2, dashboardConfig.namesHelperColumn, helperRowCount, 1);
+  const candidateItems = getScaleScreeningDashboardCandidateItems_(workerSheet, previousSearchText);
+  const defaultCandidate = candidateItems.filter(function(item) {
+    return item.label.indexOf("송지훈") === 0;
+  })[0] || candidateItems[0] || null;
 
-  helperRange.clearContent();
-  if (candidateSelections.length) {
-    helperRange.setValues(candidateSelections.map(function(selection) {
-      return [selection];
-    }));
+  const effectiveSearchText = previousSearchText || (previousClientSelection ? extractScaleClientNameFromSelection_(previousClientSelection) : (defaultCandidate ? defaultCandidate.name : ""));
+  searchInputRange.clearDataValidations();
+  searchInputRange.clearContent();
+  searchInputRange.setNote("대상자 이름 일부를 입력하면 아래 후보 목록이 갱신됩니다. 후보 목록의 아무 셀이나 클릭하면 대상자가 선택됩니다.");
+  searchInputMergedRange.setBackground("#ffffff");
+  if (effectiveSearchText) {
+    searchInputRange.setValue(effectiveSearchText);
   }
 
-  clientNameMergedRange.clearDataValidations();
-  clientNameRange.clearContent();
-  clientNameRange.setNote("대상자 목록에서 이름과 생년월일 조합을 선택하세요. 직접 입력도 가능하며, 목록에 없는 값이면 검색 결과가 없다고 표시됩니다.");
-  clientNameMergedRange.setBackground("#ffffff");
-  if (candidateSelections.length) {
-    const validation = SpreadsheetApp.newDataValidation()
-      .requireValueInList(candidateSelections, true)
-      .setAllowInvalid(true)
-      .setHelpText("드롭다운에서 대상자를 선택하거나 직접 입력할 수 있습니다.")
-      .build();
-    clientNameRange.setDataValidation(validation);
-  }
-
-  SpreadsheetApp.flush();
-  const selectedClientSelection = (
-    candidateSelections.indexOf(previousClientSelection) !== -1
-      ? previousClientSelection
-      : candidateSelections.filter(function(selection) { return selection.indexOf("송지훈") === 0; })[0] || candidateSelections[0] || previousClientSelection
+  const selectedClientSelection = renderScaleScreeningDashboardCandidateRows_(
+    sheet,
+    candidateItems,
+    previousClientSelection || (defaultCandidate ? defaultCandidate.label : "")
   );
-  if (selectedClientSelection) {
-    clientNameRange.setValue(selectedClientSelection);
-  }
-  const longitudinalRows = populateScaleScreeningDashboardLongitudinalRows_(sheet, normalizeText_(clientNameRange.getDisplayValue()));
-  renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows);
+  renderScaleScreeningDashboardSelection_(sheet, selectedClientSelection);
 
   sheet.setFrozenRows(detailHeaderRow);
   sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
   sheet.getRange("A2:L2").setFontColor("#4f5b52").setFontSize(10).setBackground("#eef6f1");
   sheet.getRange("A4:F4").setFontWeight("bold").setBackground("#eef6f1");
-  sheet.getRange("G4:L5").setBackground("#f8fbf9").setFontColor("#4f5b52").setWrap(true);
-  sheet.getRange("A4:L5").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange("A11:L11").setBackground("#16324f").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  sheet.getRange("A6:F6").setFontWeight("bold").setBackground("#f8fbf9");
+  sheet.getRange("G4:L6").setBackground("#f8fbf9").setFontColor("#4f5b52").setWrap(true);
+  sheet.getRange("A4:L6").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange("A15:L15").setBackground("#16324f").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  styleHeaderRow_(sheet, candidateHeaderRow, 6);
   styleHeaderRow_(sheet, detailHeaderRow, 10);
   styleScaleDashboardCards_(sheet);
   applyScaleBanding_(sheet.getRange(detailHeaderRow, 1, Math.max(sheet.getMaxRows() - detailHeaderRow + 1, 2), 10));
   applyScaleDashboardRules_(sheet);
-  setScaleColumnWidths_(sheet, [95, 145, 85, 105, 105, 90, 85, 120, 110, 220, 50, 50, 50, 95, 130, 85, 95, 120, 120, 110, 180, 140, 160, 95, 95, 95, 95, 160]);
+  setScaleColumnWidths_(sheet, [140, 110, 105, 135, 88, 76, 95, 120, 110, 220, 50, 50, 50, 95, 130, 85, 95, 120, 120, 110, 180, 140, 160, 95, 95, 95, 95, 160]);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
   sheet.getRange("D:F").setNumberFormat("0.0");
   sheet.getRange("A" + String(detailHeaderRow) + ":J320").setFontSize(10).setVerticalAlignment("middle");
   sheet.setRowHeights(1, 1, 34);
   sheet.setRowHeights(2, 1, 26);
-  sheet.setRowHeights(4, 2, 28);
+  sheet.setRowHeights(4, 1, 28);
+  sheet.setRowHeights(6, 1, 28);
+  sheet.setRowHeights(candidateHeaderRow, candidateRowCount + 1, 24);
   sheet.setRowHeights(7, 3, 28);
-  sheet.setRowHeights(11, 1, 24);
+  sheet.setRowHeights(11, 3, 28);
+  sheet.setRowHeights(15, 1, 24);
   sheet.setRowHeights(detailHeaderRow, 40, 24);
 
   const charts = sheet.getCharts();
@@ -1551,6 +1554,195 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     sheet.removeChart(chart);
   });
   sheet.hideColumns(helperStartColumn, dashboardConfig.namesHelperColumn - helperStartColumn + 1);
+}
+
+function renderScaleScreeningDashboardCandidateRows_(sheet, candidateItems, selectedClientSelection) {
+  const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const candidateStartRow = dashboardConfig.candidateStartRow;
+  const candidateRowCount = dashboardConfig.candidateRowCount;
+  const candidateColumnCount = dashboardConfig.candidateColumnCount;
+  const candidateRange = sheet.getRange(candidateStartRow, dashboardConfig.candidateStartColumn, candidateRowCount, candidateColumnCount);
+  const normalizedSelected = normalizeText_(selectedClientSelection);
+  const normalizedSearch = normalizeScaleLookupText_(sheet.getRange(dashboardConfig.searchInputCell).getDisplayValue());
+  const visibleItems = candidateItems.slice(0, candidateRowCount);
+
+  const outputRows = [];
+  if (!visibleItems.length) {
+    outputRows.push(["검색 결과가 없습니다.", "", "", "", "", ""]);
+  }
+
+  visibleItems.forEach(function(item) {
+    const isSelected = normalizeText_(item.label) === normalizedSelected;
+    outputRows.push([
+      item.name,
+      item.birthDate || "",
+      item.latestSessionDate || "",
+      item.latestScale || "",
+      item.count ? item.count + "건" : "",
+      isSelected ? "선택됨" : ""
+    ]);
+  });
+
+  while (outputRows.length < candidateRowCount) {
+    outputRows.push(["", "", "", "", "", ""]);
+  }
+
+  candidateRange.clearContent().clearFormat();
+  candidateRange.setValues(outputRows);
+  candidateRange.setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
+  candidateRange.setFontSize(10).setVerticalAlignment("middle");
+  candidateRange.getCell(1, 6).setNote("후보 목록의 아무 셀이나 클릭하면 대상자가 선택됩니다.");
+
+  visibleItems.forEach(function(item, index) {
+    const rowRange = sheet.getRange(candidateStartRow + index, dashboardConfig.candidateStartColumn, 1, candidateColumnCount);
+    if (normalizeText_(item.label) === normalizedSelected) {
+      rowRange.setBackground("#e8f3ed").setFontColor("#1b4332").setFontWeight("bold");
+    } else {
+      rowRange.setBackground(index % 2 === 0 ? "#ffffff" : "#f8fbf9").setFontColor("#163329").setFontWeight("normal");
+    }
+  });
+
+  if (!visibleItems.length) {
+    sheet.getRange(candidateStartRow, dashboardConfig.candidateStartColumn, 1, candidateColumnCount)
+      .setBackground("#fff8e1")
+      .setFontColor("#9a6700");
+  }
+
+  if (normalizedSelected && visibleItems.some(function(item) { return normalizeText_(item.label) === normalizedSelected; })) {
+    return selectedClientSelection;
+  }
+
+  if (!normalizedSearch && visibleItems.length) {
+    return visibleItems[0].label;
+  }
+
+  return "";
+}
+
+function renderScaleScreeningDashboardSelection_(sheet, selectedClientSelection) {
+  const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const selectedClientRange = sheet.getRange(dashboardConfig.clientNameCell);
+  const selectedMergedRange = sheet.getRange("B6:F6");
+  const normalizedSelection = normalizeText_(selectedClientSelection);
+
+  selectedClientRange.clearContent();
+  if (normalizedSelection) {
+    selectedClientRange.setValue(selectedClientSelection);
+    selectedMergedRange.setBackground("#e8f3ed").setFontColor("#1b4332");
+  } else {
+    selectedClientRange.setValue("후보 목록에서 대상자를 선택하세요.");
+    selectedMergedRange.setBackground("#fff8e1").setFontColor("#9a6700");
+  }
+
+  const longitudinalRows = populateScaleScreeningDashboardLongitudinalRows_(sheet, normalizedSelection);
+  renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows);
+}
+
+function getScaleScreeningDashboardCandidateItems_(workerSheet, searchText) {
+  if (!workerSheet || workerSheet.getLastRow() < 2) {
+    return [];
+  }
+
+  const normalizedSearch = normalizeScaleLookupText_(searchText);
+  const values = workerSheet.getRange(2, 1, workerSheet.getLastRow() - 1, 12).getDisplayValues();
+  const uniqueSelections = new Map();
+
+  values.forEach(function(row) {
+    const clientName = normalizeText_(row[1]);
+    const birthDate = normalizeScaleSearchDate_(row[2]);
+    const sessionDate = normalizeScaleSearchDate_(row[0]);
+    const scaleName = normalizeText_(row[3]);
+    if (!clientName || /^\d+(?:\.\d+)?$/.test(clientName)) {
+      return;
+    }
+
+    const selectionLabel = buildScaleScreeningClientSelectionLabel_(clientName, birthDate);
+    const normalizedLabel = normalizeScaleLookupText_(selectionLabel);
+    const normalizedName = normalizeScaleLookupText_(clientName);
+    const normalizedBirth = normalizeScaleLookupText_(birthDate);
+    if (
+      normalizedSearch &&
+      normalizedName.indexOf(normalizedSearch) === -1 &&
+      normalizedLabel.indexOf(normalizedSearch) === -1 &&
+      normalizedBirth.indexOf(normalizedSearch) === -1
+    ) {
+      return;
+    }
+
+    if (!uniqueSelections.has(normalizedLabel)) {
+      uniqueSelections.set(normalizedLabel, {
+        label: selectionLabel,
+        name: clientName,
+        birthDate: birthDate,
+        latestSessionDate: sessionDate,
+        latestScale: scaleName,
+        count: 1
+      });
+      return;
+    }
+
+    const candidate = uniqueSelections.get(normalizedLabel);
+    candidate.count += 1;
+    if (sessionDate && (!candidate.latestSessionDate || sessionDate > candidate.latestSessionDate)) {
+      candidate.latestSessionDate = sessionDate;
+      candidate.latestScale = scaleName;
+    }
+  });
+
+  return Array.from(uniqueSelections.values()).sort(function(a, b) {
+    const nameCompare = normalizeText_(a.name).localeCompare(normalizeText_(b.name), "ko");
+    if (nameCompare !== 0) {
+      return nameCompare;
+    }
+    return normalizeText_(a.birthDate).localeCompare(normalizeText_(b.birthDate), "ko");
+  });
+}
+
+function extractScaleClientNameFromSelection_(selectionLabel) {
+  return normalizeText_(selectionLabel).replace(/\s*\([^)]+\)\s*$/, "");
+}
+
+function handleScaleDashboardSelectionChange_(e) {
+  if (!e || !e.range) {
+    return false;
+  }
+
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== getScaleScreeningDashboardSheetName_()) {
+    return false;
+  }
+
+  const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const row = e.range.getRow();
+  const column = e.range.getColumn();
+  if (
+    row < dashboardConfig.candidateStartRow ||
+    row >= dashboardConfig.candidateStartRow + dashboardConfig.candidateRowCount ||
+    column < dashboardConfig.candidateStartColumn ||
+    column >= dashboardConfig.candidateStartColumn + dashboardConfig.candidateColumnCount
+  ) {
+    return false;
+  }
+
+  const rowValues = sheet.getRange(row, dashboardConfig.candidateStartColumn, 1, dashboardConfig.candidateColumnCount).getDisplayValues()[0];
+  const clientName = normalizeText_(rowValues[0]);
+  const birthDate = normalizeText_(rowValues[1]);
+  if (!clientName || clientName === "검색 결과가 없습니다.") {
+    return false;
+  }
+
+  const selectedLabel = buildScaleScreeningClientSelectionLabel_(clientName, birthDate);
+  renderScaleScreeningDashboardCandidateRows_(
+    sheet,
+    getScaleScreeningDashboardCandidateItems_(
+      getScaleScreeningTargetSpreadsheet_().getSheetByName(getScaleScreeningWorkerViewSheetName_()),
+      sheet.getRange(dashboardConfig.searchInputCell).getDisplayValue()
+    ),
+    selectedLabel
+  );
+  renderScaleScreeningDashboardSelection_(sheet, selectedLabel);
+  SpreadsheetApp.flush();
+  return true;
 }
 
 function populateScaleScreeningDashboardLongitudinalRows_(sheet, clientName) {
@@ -1565,7 +1757,7 @@ function populateScaleScreeningDashboardLongitudinalRows_(sheet, clientName) {
     : [];
   const outputRows = longitudinalRows.length
     ? longitudinalRows
-    : [["검색 결과가 없습니다.", "", "", "", "", "", "", "", "", ""]];
+    : [[normalizedClientSelection ? "검색 결과가 없습니다." : "후보 목록에서 대상자를 선택하세요.", "", "", "", "", "", "", "", "", ""]];
 
   ensureSheetSize_(sheet, Math.max(sheet.getMaxRows(), detailStartRow + outputRows.length + 10), dashboardConfig.namesHelperColumn);
   sheet.getRange(detailStartRow, 1, outputRows.length, 10).setValues(outputRows);
@@ -1655,10 +1847,10 @@ function applyScaleBanding_(range) {
 
 function styleScaleDashboardCards_(sheet) {
   [
-    { range: "A7:C9", background: "#e8f3ed", fontColor: "#1b4332" },
-    { range: "D7:F9", background: "#eef4ff", fontColor: "#1d4ed8" },
-    { range: "G7:I9", background: "#fff6db", fontColor: "#9a6700" },
-    { range: "J7:L9", background: "#fdecec", fontColor: "#b42318" }
+    { range: "G8:I10", background: "#e8f3ed", fontColor: "#1b4332" },
+    { range: "J8:L10", background: "#eef4ff", fontColor: "#1d4ed8" },
+    { range: "G11:I13", background: "#fff6db", fontColor: "#9a6700" },
+    { range: "J11:L13", background: "#fdecec", fontColor: "#b42318" }
   ].forEach(function(card) {
     sheet.getRange(card.range)
       .setBackground(card.background)
@@ -1836,10 +2028,10 @@ function renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows) {
     ? new Set(validRows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
     : 0;
 
-  sheet.getRange("A7:C9").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
-  sheet.getRange("D7:F9").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
-  sheet.getRange("G7:I9").setValue("평균 정규화점수\n" + (averageNormalizedScore === null ? "-" : averageNormalizedScore.toFixed(1)));
-  sheet.getRange("J7:L9").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
+  sheet.getRange("G8:I10").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
+  sheet.getRange("J8:L10").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
+  sheet.getRange("G8:I10").setValue("평균 정규화점수\n" + (averageNormalizedScore === null ? "-" : averageNormalizedScore.toFixed(1)));
+  sheet.getRange("J8:L10").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
 }
 
 function formatScaleDashboardDateDisplay_(value) {
