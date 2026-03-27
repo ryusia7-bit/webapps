@@ -150,11 +150,11 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     clientNameCell: "B4",
     birthDateCell: "E4",
     namesHelperColumn: 27,
-    detailHeaderRow: 11,
-    detailStartRow: 12,
-    trendStartRow: 11,
+    detailHeaderRow: 13,
+    detailStartRow: 14,
+    trendStartRow: 13,
     trendStartColumn: 14,
-    chartAnchorRow: 1,
+    chartAnchorRow: 6,
     chartAnchorColumn: 12
   },
   settingsRows: [
@@ -172,7 +172,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
-const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v3";
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v4";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
 
 function setupScaleScreeningSyncSheets() {
@@ -1345,6 +1345,10 @@ function buildScaleScreeningSettingsSheet_(sheet) {
 function buildScaleScreeningDashboardSheet_(sheet) {
   const workerSheetRef = escapeScaleSheetNameForFormula_(getScaleScreeningWorkerViewSheetName_());
   const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const detailHeaderRow = dashboardConfig.detailHeaderRow;
+  const detailStartRow = dashboardConfig.detailStartRow;
+  const trendHeaderCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(detailHeaderRow);
+  const trendFormulaCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow);
   const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
@@ -1373,26 +1377,29 @@ function buildScaleScreeningDashboardSheet_(sheet) {
 
   sheet.clear();
   ensureSheetSize_(sheet, 320, 35);
+  sheet.setHiddenGridlines(true);
 
   sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
-  sheet.getRange("A2:L2").merge().setValue("대상자명과 생년월일을 입력하면 검사 이력과 척도별 점수 변화 그래프를 확인할 수 있습니다.");
+  sheet.getRange("A2:L2").merge().setValue("대상자명과 생년월일을 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다.");
   sheet.getRange("A4").setValue("대상자명");
   sheet.getRange("D4").setValue("생년월일");
-  sheet.getRange("G4:L4").merge().setValue("동명이인은 생년월일을 함께 입력하면 더 정확하게 조회됩니다.");
-  sheet.getRange("A6:C7").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))))&"건","0건"))');
-  sheet.getRange("D6:F7").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),1,FALSE),1,1),"-"))');
-  sheet.getRange("G6:I7").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd")),' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
-  sheet.getRange("J6:L7").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),"<>")&"건","0건"))');
-  sheet.getRange("A10:J10").setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
-  sheet.getRange("N10").setValue("점수 변화 그래프 데이터");
+  sheet.getRange("B4:C4").merge();
+  sheet.getRange("E4:F4").merge();
+  sheet.getRange("G4:L5").merge().setValue("동명이인은 생년월일을 함께 입력하면 정확한 비교가 가능합니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
+  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))))&"건","0건"))');
+  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),1,FALSE),1,1),"-"))');
+  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd")),' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
+  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,IF($E$4="",'+ workerSheetRef + '!A2:A<>"",' + workerSheetRef + '!C2:C=TEXT($E$4,"yyyy-mm-dd"))),"<>")&"건","0건"))');
+  sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
+  sheet.getRange(trendHeaderCell).setValue("점수 변화 그래프 데이터");
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
 
   sheet.getRange(dashboardConfig.clientNameCell).clearDataValidations();
   sheet.getRange(dashboardConfig.birthDateCell).setNumberFormat("yyyy-mm-dd");
-  sheet.getRange(dashboardConfig.clientNameCell).setBackground("#ffffff");
-  sheet.getRange(dashboardConfig.birthDateCell).setBackground("#ffffff");
-  sheet.getRange("A11").setFormula(detailFormula);
-  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow)).setFormula(trendFormula);
+  sheet.getRange("B4:C4").setBackground("#ffffff");
+  sheet.getRange("E4:F4").setBackground("#ffffff");
+  sheet.getRange("A" + String(detailStartRow)).setFormula(detailFormula);
+  sheet.getRange(trendFormulaCell).setFormula(trendFormula);
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
     .setFormula('=ARRAYFORMULA(SORT(UNIQUE(FILTER(' + workerSheetRef + '!B2:B,' + workerSheetRef + '!B2:B<>""))))');
 
@@ -1402,39 +1409,56 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .build();
   sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
 
-  sheet.setFrozenRows(10);
+  sheet.setFrozenRows(detailHeaderRow);
   sheet.hideColumns(dashboardConfig.namesHelperColumn, 35 - dashboardConfig.namesHelperColumn + 1);
-  sheet.getRange("A1:L1").setFontSize(18).setFontWeight("bold").setBackground("#d9ead3").setHorizontalAlignment("left");
-  sheet.getRange("A2:L2").setFontColor("#4f5b52");
-  sheet.getRange("A4:F4").setFontWeight("bold");
-  sheet.getRange("A4:L4").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
-  styleHeaderRow_(sheet, 10, 10);
-  sheet.getRange("N10:Z10").setFontWeight("bold").setBackground("#fff2cc");
+  sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
+  sheet.getRange("A2:L2").setFontColor("#4f5b52").setFontSize(10).setBackground("#eef6f1");
+  sheet.getRange("A4:F4").setFontWeight("bold").setBackground("#eef6f1");
+  sheet.getRange("G4:L5").setBackground("#f8fbf9").setFontColor("#4f5b52").setWrap(true);
+  sheet.getRange("A4:L5").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
+  styleHeaderRow_(sheet, detailHeaderRow, 10);
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(detailHeaderRow) + ":Z" + String(detailHeaderRow)).setFontWeight("bold").setBackground("#fff2cc");
   styleScaleDashboardCards_(sheet);
-  applyScaleBanding_(sheet.getRange(10, 1, Math.max(sheet.getMaxRows() - 9, 2), 10));
+  applyScaleBanding_(sheet.getRange(detailHeaderRow, 1, Math.max(sheet.getMaxRows() - detailHeaderRow + 1, 2), 10));
   applyScaleDashboardRules_(sheet);
   setScaleColumnWidths_(sheet, [95, 140, 85, 105, 120, 105, 105, 180, 140, 160, 90, 90, 90, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95]);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
   sheet.getRange("D:D").setNumberFormat("0.0");
+  sheet.getRange("A" + String(detailHeaderRow) + ":J320").setFontSize(10).setVerticalAlignment("middle");
+  sheet.setRowHeights(1, 1, 34);
+  sheet.setRowHeights(2, 1, 26);
+  sheet.setRowHeights(4, 2, 28);
+  sheet.setRowHeights(7, 3, 28);
+  sheet.setRowHeights(detailHeaderRow, 1, 24);
 
   const charts = sheet.getCharts();
   charts.forEach(function(chart) {
     sheet.removeChart(chart);
   });
 
-  const chartRange = sheet.getRange("N11:Z320");
+  const chartRange = sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":Z320");
   const chart = sheet.newChart()
     .asLineChart()
     .addRange(chartRange)
     .setNumHeaders(1)
     .setOption("title", "검사일별 척도 변화")
-    .setOption("legend", { position: "bottom", textStyle: { fontSize: 10 } })
-    .setOption("hAxis", { title: "검사일", slantedText: true, slantedTextAngle: 30 })
-    .setOption("vAxis", { title: "정규화 점수", viewWindow: { min: 0, max: 100 } })
+    .setOption("legend", { position: "right", textStyle: { fontSize: 10 } })
+    .setOption("hAxis", {
+      title: "검사일",
+      slantedText: true,
+      slantedTextAngle: 30,
+      textStyle: { fontSize: 10, color: "#475467" }
+    })
+    .setOption("vAxis", {
+      title: "정규화 점수",
+      viewWindow: { min: 0, max: 100 },
+      gridlines: { color: "#d9e2dc", count: 6 },
+      textStyle: { fontSize: 10, color: "#475467" }
+    })
     .setOption("curveType", "function")
-    .setOption("lineWidth", 3)
-    .setOption("pointSize", 6)
-    .setOption("chartArea", { left: 70, top: 50, width: "72%", height: "62%" })
+    .setOption("lineWidth", 4)
+    .setOption("pointSize", 7)
+    .setOption("chartArea", { left: 70, top: 42, width: "62%", height: "70%" })
     .setOption("backgroundColor", "#ffffff")
     .setOption("series", {
       0: { color: "#3b82f6" },
@@ -1470,16 +1494,16 @@ function applyScaleBanding_(range) {
 
 function styleScaleDashboardCards_(sheet) {
   [
-    { range: "A6:C7", background: "#e8f3ed", fontColor: "#1b4332" },
-    { range: "D6:F7", background: "#eef4ff", fontColor: "#1d4ed8" },
-    { range: "G6:I7", background: "#fff6db", fontColor: "#9a6700" },
-    { range: "J6:L7", background: "#fdecec", fontColor: "#b42318" }
+    { range: "A7:C9", background: "#e8f3ed", fontColor: "#1b4332" },
+    { range: "D7:F9", background: "#eef4ff", fontColor: "#1d4ed8" },
+    { range: "G7:I9", background: "#fff6db", fontColor: "#9a6700" },
+    { range: "J7:L9", background: "#fdecec", fontColor: "#b42318" }
   ].forEach(function(card) {
     sheet.getRange(card.range)
       .setBackground(card.background)
       .setFontColor(card.fontColor)
       .setFontWeight("bold")
-      .setFontSize(12)
+      .setFontSize(14)
       .setWrap(true)
       .setHorizontalAlignment("center")
       .setVerticalAlignment("middle")
@@ -1544,31 +1568,31 @@ function applyScaleDashboardRules_(sheet) {
       .whenNumberGreaterThanOrEqualTo(80)
       .setBackground("#fdecec")
       .setFontColor("#b42318")
-      .setRanges([sheet.getRange("D12:D")])
+      .setRanges([sheet.getRange("D14:D")])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberBetween(60, 79.9999)
       .setBackground("#fff4e5")
       .setFontColor("#b54708")
-      .setRanges([sheet.getRange("D12:D")])
+      .setRanges([sheet.getRange("D14:D")])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberBetween(30, 59.9999)
       .setBackground("#fff9db")
       .setFontColor("#9a6700")
-      .setRanges([sheet.getRange("D12:D")])
+      .setRanges([sheet.getRange("D14:D")])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
       .whenNumberLessThan(30)
       .setBackground("#ecfdf3")
       .setFontColor("#027a48")
-      .setRanges([sheet.getRange("D12:D")])
+      .setRanges([sheet.getRange("D14:D")])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=LEN($I12)>0')
+      .whenFormulaSatisfied('=LEN($I14)>0')
       .setBackground("#fdecec")
       .setFontColor("#b42318")
-      .setRanges([sheet.getRange("A12:J")])
+      .setRanges([sheet.getRange("A14:J")])
       .build()
   ];
   sheet.setConditionalFormatRules(rules);
@@ -1898,4 +1922,549 @@ function toCellText_(value) {
     return String(value);
   }
   return safeStringifyScaleValue_(value);
+}
+
+/**
+ * 척도 대시보드 확인용 샘플 데이터 100건을 생성합니다.
+ *
+ * @returns {void}
+ */
+function seedScaleScreeningSampleData() {
+  const result = seedScaleScreeningSampleData_(100);
+  SpreadsheetApp.getUi().alert(
+    "척도검사 샘플 데이터 생성",
+    [
+      "샘플 검사 기록을 생성했습니다.",
+      "생성/갱신 건수: " + result.generatedCount + "건",
+      "기록 삽입: " + result.recordsInserted + "건",
+      "기록 갱신: " + result.recordsUpdated + "건",
+      "문항응답 삽입: " + result.answersInserted + "건",
+      "문항응답 갱신: " + result.answersUpdated + "건"
+    ].join("\n"),
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/**
+ * 샘플 검사 기록을 배치 생성해 시트에 저장하고 대시보드를 새로고침합니다.
+ *
+ * @param {number=} count 생성 건수
+ * @returns {{generatedCount:number, recordsInserted:number, recordsUpdated:number, answersInserted:number, answersUpdated:number}}
+ */
+function seedScaleScreeningSampleData_(count) {
+  const lock = LockService.getDocumentLock();
+  let hasLock = false;
+  console.time("seedScaleScreeningSampleData");
+
+  try {
+    lock.waitLock(30000);
+    hasLock = true;
+
+    const payload = buildScaleScreeningSamplePayload_(count || 100);
+    const result = upsertScaleScreeningPayload_(payload);
+    buildScaleScreeningWorkspace_();
+    applyScaleScreeningDisplayFormats_();
+    invalidateScaleScreeningSyncCache_();
+
+    return {
+      generatedCount: payload.records.length,
+      recordsInserted: result.recordsInserted,
+      recordsUpdated: result.recordsUpdated,
+      answersInserted: result.answersInserted,
+      answersUpdated: result.answersUpdated
+    };
+  } finally {
+    if (hasLock) {
+      lock.releaseLock();
+    }
+    console.timeEnd("seedScaleScreeningSampleData");
+  }
+}
+
+/**
+ * @param {number} count
+ * @returns {{token:string, sentAt:string, syncScope:string, source:string, appSettings:Object, records:Object[]}}
+ */
+function buildScaleScreeningSamplePayload_(count) {
+  return {
+    token: getScaleScreeningSyncToken_(),
+    sentAt: Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    syncScope: "sample_seed",
+    source: "scale_screening_sample_seed",
+    appSettings: {
+      organizationName: "다시서기종합지원센터",
+      teamName: "정신건강팀",
+      contactNote: "샘플 데이터 자동 생성"
+    },
+    records: buildScaleScreeningSampleRecords_(count)
+  };
+}
+
+/**
+ * @param {number} count
+ * @returns {Object[]}
+ */
+function buildScaleScreeningSampleRecords_(count) {
+  const subjects = getScaleScreeningSampleSubjects_();
+  const visitOffsets = [0, 28, 56, 84, 112];
+  const scheduleByCohort = {
+    mood: [
+      ["phq-9", "gad-7"],
+      ["phq-9", "gad-7"],
+      ["phq-9", "cri"],
+      ["phq-9", "cri"],
+      ["gad-7", "cri"]
+    ],
+    stress: [
+      ["pss-10", "isi-k"],
+      ["pss-10", "isi-k"],
+      ["pss-10", "ies-r"],
+      ["isi-k", "ies-r"],
+      ["pss-10", "ies-r"]
+    ],
+    risk: [
+      ["audit-k", "k-mdq"],
+      ["audit-k", "mkpq-16"],
+      ["audit-k", "k-mdq"],
+      ["mkpq-16", "k-mdq"],
+      ["audit-k", "mkpq-16"]
+    ]
+  };
+  const records = [];
+
+  subjects.forEach(function(subject, subjectIndex) {
+    const schedule = scheduleByCohort[subject.cohort] || scheduleByCohort.mood;
+    schedule.forEach(function(scalePair, visitIndex) {
+      scalePair.forEach(function(scaleId, slotIndex) {
+        if (records.length >= count) {
+          return;
+        }
+        records.push(buildScaleScreeningSampleRecord_(subject, subjectIndex, visitOffsets[visitIndex], visitIndex, scaleId, slotIndex));
+      });
+    });
+  });
+
+  return records.slice(0, Math.max(1, count));
+}
+
+/**
+ * @returns {Array<{name:string,birthDate:string,gender:string,cohort:string,workerName:string,baseRisk:number,trend:number,wave:number}>}
+ */
+function getScaleScreeningSampleSubjects_() {
+  return [
+    { name: "김민수", birthDate: "1984-03-18", gender: "남", cohort: "mood", workerName: "박세은", baseRisk: 72, trend: -6, wave: 4 },
+    { name: "김민수", birthDate: "1992-11-05", gender: "남", cohort: "mood", workerName: "이하린", baseRisk: 48, trend: 3, wave: 7 },
+    { name: "이지은", birthDate: "1988-07-21", gender: "여", cohort: "mood", workerName: "박세은", baseRisk: 64, trend: -4, wave: 5 },
+    { name: "최윤서", birthDate: "1979-01-09", gender: "여", cohort: "mood", workerName: "김도현", baseRisk: 58, trend: 1, wave: 6 },
+    { name: "정하늘", birthDate: "1995-05-14", gender: "여", cohort: "stress", workerName: "이하린", baseRisk: 62, trend: -2, wave: 8 },
+    { name: "박준호", birthDate: "1981-09-02", gender: "남", cohort: "stress", workerName: "김도현", baseRisk: 54, trend: 2, wave: 5 },
+    { name: "송지훈", birthDate: "1974-12-27", gender: "남", cohort: "stress", workerName: "박세은", baseRisk: 69, trend: -5, wave: 4 },
+    { name: "오세영", birthDate: "1987-06-11", gender: "여", cohort: "risk", workerName: "이하린", baseRisk: 71, trend: -3, wave: 6 },
+    { name: "한지민", birthDate: "1990-10-30", gender: "여", cohort: "risk", workerName: "김도현", baseRisk: 44, trend: 5, wave: 7 },
+    { name: "이도현", birthDate: "1983-02-16", gender: "남", cohort: "risk", workerName: "박세은", baseRisk: 66, trend: -1, wave: 5 }
+  ];
+}
+
+/**
+ * @returns {Object<string, Object>}
+ */
+function getScaleScreeningSampleConfigs_() {
+  return {
+    "phq-9": {
+      title: "우울(PHQ-9)",
+      shortTitle: "PHQ-9",
+      maxScore: 27,
+      questionCount: 9,
+      itemCount: 4,
+      itemMaxScore: 3,
+      scaleBias: 8,
+      optionLabels: ["없음", "2~6일", "7~12일", "거의 매일"],
+      questionLabels: ["기분 저하", "흥미 감소", "수면 문제", "집중 어려움"],
+      bands: [
+        { min: 0, max: 4, label: "낮음", description: "우울 증상 수준이 낮은 편입니다." },
+        { min: 5, max: 9, label: "경도", description: "가벼운 우울 증상이 시사됩니다." },
+        { min: 10, max: 14, label: "중등도", description: "중등도 수준의 우울 증상이 시사됩니다." },
+        { min: 15, max: 19, label: "중등고도", description: "임상적 평가가 필요한 수준의 우울 증상이 시사됩니다." },
+        { min: 20, max: 27, label: "고도", description: "높은 수준의 우울 증상이 시사됩니다." }
+      ]
+    },
+    "gad-7": {
+      title: "불안(GAD-7)",
+      shortTitle: "GAD-7",
+      maxScore: 21,
+      questionCount: 7,
+      itemCount: 4,
+      itemMaxScore: 3,
+      scaleBias: 6,
+      optionLabels: ["없음", "2~6일", "7~12일", "거의 매일"],
+      questionLabels: ["초조함", "걱정 통제 어려움", "과도한 염려", "긴장/예민함"],
+      bands: [
+        { min: 0, max: 4, label: "낮음", description: "불안 증상 수준이 낮은 편입니다." },
+        { min: 5, max: 9, label: "경도", description: "가벼운 불안 증상이 시사됩니다." },
+        { min: 10, max: 14, label: "중등도", description: "중등도 수준의 불안 증상이 시사됩니다." },
+        { min: 15, max: 21, label: "고도", description: "높은 수준의 불안 증상이 시사됩니다." }
+      ]
+    },
+    "pss-10": {
+      title: "스트레스(PSS)",
+      shortTitle: "PSS",
+      maxScore: 40,
+      questionCount: 10,
+      itemCount: 4,
+      itemMaxScore: 4,
+      scaleBias: 5,
+      optionLabels: ["전혀 없음", "거의 없음", "가끔", "자주", "매우 자주"],
+      questionLabels: ["압박감", "예상 못한 일", "통제감 저하", "피로 누적"],
+      bands: [
+        { min: 0, max: 13, label: "낮음", description: "지각된 스트레스 수준이 낮은 편입니다." },
+        { min: 14, max: 26, label: "중간", description: "중간 수준의 스트레스가 시사됩니다." },
+        { min: 27, max: 40, label: "높음", description: "높은 스트레스 수준이 시사됩니다." }
+      ]
+    },
+    "isi-k": {
+      title: "불면(ISI-K)",
+      shortTitle: "ISI-K",
+      maxScore: 28,
+      questionCount: 7,
+      itemCount: 4,
+      itemMaxScore: 4,
+      scaleBias: 7,
+      optionLabels: ["문제 없음", "약간", "중간", "심함", "매우 심함"],
+      questionLabels: ["입면 어려움", "수면 유지", "조기 각성", "주간 피로"],
+      bands: [
+        { min: 0, max: 7, label: "정상", description: "임상적으로 의미 있는 불면 수준은 낮습니다." },
+        { min: 8, max: 14, label: "경도", description: "초기 개입과 수면위생 교육을 고려할 수 있습니다." },
+        { min: 15, max: 21, label: "중등도", description: "전문 평가가 필요한 수준의 불면이 시사됩니다." },
+        { min: 22, max: 28, label: "고도", description: "적극적인 전문 개입이 권장됩니다." }
+      ]
+    },
+    "ies-r": {
+      title: "사건충격척도(IES-R)",
+      shortTitle: "IES-R",
+      maxScore: 88,
+      questionCount: 22,
+      itemCount: 4,
+      itemMaxScore: 4,
+      scaleBias: 9,
+      optionLabels: ["전혀 없음", "조금", "보통", "상당함", "극심함"],
+      questionLabels: ["침습적 회상", "회피 반응", "과각성", "정서적 무감각"],
+      bands: [
+        { min: 0, max: 24, label: "낮음", description: "외상 후 스트레스 반응이 상대적으로 낮은 편입니다." },
+        { min: 25, max: 39, label: "주의", description: "외상 후 스트레스 반응에 대한 추가 관찰이 필요합니다." },
+        { min: 40, max: 88, label: "고위험", description: "외상 후 스트레스 반응 고위험군으로 추가 평가가 권장됩니다." }
+      ]
+    },
+    "audit-k": {
+      title: "알코올중독(AUDIT-K)",
+      shortTitle: "AUDIT-K",
+      maxScore: 40,
+      questionCount: 10,
+      itemCount: 4,
+      itemMaxScore: 4,
+      scaleBias: 10,
+      optionLabels: ["전혀 없음", "가끔", "때때로", "자주", "매우 자주"],
+      questionLabels: ["음주 빈도", "과음 빈도", "절주 어려움", "음주 후 후회"],
+      bands: [
+        { min: 0, max: 7, label: "낮음", description: "위험 음주 가능성이 낮은 편입니다." },
+        { min: 8, max: 15, label: "위험음주", description: "위험 음주 가능성이 시사됩니다." },
+        { min: 16, max: 19, label: "해로운 음주", description: "해로운 음주 수준이 의심됩니다." },
+        { min: 20, max: 40, label: "의존 위험", description: "알코올 의존 수준의 위험이 시사됩니다." }
+      ]
+    },
+    "k-mdq": {
+      title: "조울증(K-MDQ)",
+      shortTitle: "K-MDQ",
+      maxScore: 13,
+      questionCount: 13,
+      itemCount: 4,
+      itemMaxScore: 1,
+      scaleBias: 3,
+      optionLabels: ["아니오", "예"],
+      questionLabels: ["기분 고양", "활동성 증가", "수면 감소", "판단력 변화"],
+      positiveCutoff: 7
+    },
+    "mkpq-16": {
+      title: "조기정신증(mKPQ-16)",
+      shortTitle: "mKPQ",
+      maxScore: 16,
+      questionCount: 16,
+      itemCount: 4,
+      itemMaxScore: 1,
+      scaleBias: 4,
+      optionLabels: ["아니오", "예"],
+      questionLabels: ["지각 변화", "의심/경계", "현실감 저하", "사고 혼란"],
+      referenceCutoff: 6
+    },
+    "cri": {
+      title: "정신건강위기평정척도(CRI)",
+      shortTitle: "CRI",
+      maxScore: 92,
+      questionCount: 23,
+      itemCount: 4,
+      itemMaxScore: 23,
+      scaleBias: 12,
+      optionLabels: ["낮음", "주의", "중간", "높음", "매우 높음"],
+      questionLabels: ["자타해 위험", "정신상태", "기능수준", "지지체계"],
+      grades: [
+        { min: 85, label: "A", description: "정신건강전문요원, 경찰, 119구급대원 공조하여 정신과 응급입원 필요" },
+        { min: 70, label: "B", description: "정신과 외래치료 및 전문가 연계 필요" },
+        { min: 55, label: "C", description: "정신상태, 기능수준, 지지체계 결과를 고려하여 집중관리 필요" },
+        { min: 35, label: "D", description: "주의관찰 필요" },
+        { min: 0, label: "E", description: "위기상황 아님" }
+      ]
+    }
+  };
+}
+
+/**
+ * @param {{name:string,birthDate:string,gender:string,cohort:string,workerName:string,baseRisk:number,trend:number,wave:number}} subject
+ * @param {number} subjectIndex
+ * @param {number} offsetDays
+ * @param {number} visitIndex
+ * @param {string} scaleId
+ * @param {number} slotIndex
+ * @returns {Object}
+ */
+function buildScaleScreeningSampleRecord_(subject, subjectIndex, offsetDays, visitIndex, scaleId, slotIndex) {
+  const config = getScaleScreeningSampleConfigs_()[scaleId];
+  const sessionDate = getScaleSampleDateText_(offsetDays);
+  const createdAt = sessionDate + "T" + (slotIndex === 0 ? "09:10:00+09:00" : "14:20:00+09:00");
+  const normalizedScore = computeScaleScreeningSampleNormalizedScore_(subject, subjectIndex, config, visitIndex, slotIndex);
+  const score = Math.max(0, Math.min(config.maxScore, Math.round((normalizedScore / 100) * config.maxScore)));
+  const evaluation = buildScaleScreeningSampleEvaluation_(config, score, normalizedScore, visitIndex);
+  const respondentDisplay = [
+    { label: "성별", value: subject.gender },
+    { label: "연령대", value: getScaleScreeningSampleAgeGroup_(subject.birthDate) }
+  ];
+
+  return {
+    id: ["sample", scaleId, subject.birthDate, visitIndex + 1, slotIndex + 1].join("-"),
+    questionnaireId: scaleId,
+    questionnaireTitle: config.title,
+    shortTitle: config.shortTitle,
+    createdAt: createdAt,
+    meta: {
+      sessionDate: sessionDate,
+      workerName: subject.workerName,
+      clientLabel: subject.name,
+      birthDate: subject.birthDate,
+      sessionNote: "샘플 데이터 · " + config.shortTitle + " 추이 확인용"
+    },
+    respondentDisplay: respondentDisplay,
+    progress: {
+      percent: 100,
+      answered: config.questionCount,
+      total: config.questionCount,
+      summary: "100% (" + config.questionCount + "/" + config.questionCount + "항목)"
+    },
+    evaluation: evaluation,
+    breakdown: buildScaleScreeningSampleBreakdown_(config, score)
+  };
+}
+
+/**
+ * @param {{baseRisk:number,trend:number,wave:number}} subject
+ * @param {number} subjectIndex
+ * @param {{scaleBias:number}} config
+ * @param {number} visitIndex
+ * @param {number} slotIndex
+ * @returns {number}
+ */
+function computeScaleScreeningSampleNormalizedScore_(subject, subjectIndex, config, visitIndex, slotIndex) {
+  const seedNoise = computeScaleScreeningSampleNoise_([
+    subjectIndex,
+    config.shortTitle,
+    visitIndex,
+    slotIndex
+  ].join("-"));
+  const wavePattern = [0, subject.wave, -4, 6, -2][visitIndex] || 0;
+  return clampScaleValue_(
+    subject.baseRisk +
+    (subject.trend * visitIndex) +
+    (config.scaleBias || 0) +
+    wavePattern +
+    seedNoise,
+    8,
+    96
+  );
+}
+
+/**
+ * @param {string} seed
+ * @returns {number}
+ */
+function computeScaleScreeningSampleNoise_(seed) {
+  let hash = 0;
+  String(seed || "").split("").forEach(function(character) {
+    hash = ((hash << 5) - hash) + character.charCodeAt(0);
+    hash |= 0;
+  });
+  return (Math.abs(hash) % 11) - 5;
+}
+
+/**
+ * @param {Object} config
+ * @param {number} score
+ * @param {number} normalizedScore
+ * @param {number} visitIndex
+ * @returns {Object}
+ */
+function buildScaleScreeningSampleEvaluation_(config, score, normalizedScore, visitIndex) {
+  const band = findScaleScreeningSampleBand_(config, score, normalizedScore);
+  const flags = [];
+
+  if (config.shortTitle === "CRI" && ["A", "B", "C"].indexOf(band.label) !== -1) {
+    flags.push({ level: "warn", text: "위기 대응 검토 필요 (" + band.label + "등급)" });
+  } else if (normalizedScore >= 80) {
+    flags.push({ level: "warn", text: config.shortTitle + " 고위험군 추정" });
+  } else if (normalizedScore >= 60) {
+    flags.push({ level: "info", text: config.shortTitle + " 주의 관찰 필요" });
+  }
+
+  return {
+    score: score,
+    maxScore: config.maxScore,
+    normalizedScore: Math.round(normalizedScore * 10) / 10,
+    scoreText: buildScaleScreeningSampleScoreText_(config, score, visitIndex),
+    bandText: band.label,
+    highlights: [
+      band.description,
+      "반복 검사 비교용 샘플 흐름"
+    ],
+    flags: flags,
+    notes: ["샘플 데이터입니다. 실사용 판단 자료가 아닙니다."]
+  };
+}
+
+/**
+ * @param {Object} config
+ * @param {number} score
+ * @param {number} visitIndex
+ * @returns {string}
+ */
+function buildScaleScreeningSampleScoreText_(config, score, visitIndex) {
+  if (config.shortTitle === "K-MDQ") {
+    return "예 " + score + "개 / " + config.maxScore + "개";
+  }
+  if (config.shortTitle === "mKPQ") {
+    const distressScore = Math.min(32, Math.max(0, (score * 2) + visitIndex + 2));
+    return "예 " + score + "개 / 힘듦 " + distressScore + "점";
+  }
+  return score + "점 / " + config.maxScore + "점";
+}
+
+/**
+ * @param {Object} config
+ * @param {number} score
+ * @param {number} normalizedScore
+ * @returns {{label:string,description:string}}
+ */
+function findScaleScreeningSampleBand_(config, score, normalizedScore) {
+  if (config.grades) {
+    const matchedGrade = config.grades.filter(function(grade) {
+      return normalizedScore >= grade.min;
+    })[0] || config.grades[config.grades.length - 1];
+    return { label: matchedGrade.label, description: matchedGrade.description };
+  }
+
+  if (config.shortTitle === "K-MDQ") {
+    const positive = score >= (config.positiveCutoff || 7);
+    return {
+      label: positive ? "양성 참고 기준 충족" : "양성 참고 기준 미충족",
+      description: positive ? "조울증 선별 양성 참고 기준에 가깝습니다." : "조울증 선별 양성 참고 기준에 미치지 않습니다."
+    };
+  }
+
+  if (config.shortTitle === "mKPQ") {
+    const threshold = config.referenceCutoff || 6;
+    return {
+      label: score >= threshold ? "고위험 참고" : "참고 범위",
+      description: score >= threshold ? "조기정신증 추가 평가가 권장됩니다." : "현재는 참고 범위로 볼 수 있습니다."
+    };
+  }
+
+  const matchedBand = (config.bands || []).filter(function(band) {
+    return score >= band.min && score <= band.max;
+  })[0] || (config.bands || [])[0] || { label: "참고 구간 없음", description: "" };
+  return { label: matchedBand.label, description: matchedBand.description || "" };
+}
+
+/**
+ * @param {Object} config
+ * @param {number} score
+ * @returns {Object[]}
+ */
+function buildScaleScreeningSampleBreakdown_(config, score) {
+  const scores = distributeScaleScreeningSampleScore_(score, config.itemCount || 4, config.itemMaxScore || 4);
+  return scores.map(function(itemScore, index) {
+    return {
+      id: "q" + String(index + 1),
+      number: String(index + 1) + ".",
+      text: (config.questionLabels || [])[index] || ("핵심 항목 " + String(index + 1)),
+      answerLabel: resolveScaleScreeningSampleOptionLabel_(config, itemScore),
+      score: itemScore
+    };
+  });
+}
+
+/**
+ * @param {number} totalScore
+ * @param {number} itemCount
+ * @param {number} itemMaxScore
+ * @returns {number[]}
+ */
+function distributeScaleScreeningSampleScore_(totalScore, itemCount, itemMaxScore) {
+  const result = [];
+  let remaining = Math.max(0, totalScore);
+  let remainingSlots = itemCount;
+
+  for (let index = 0; index < itemCount; index += 1) {
+    const average = remainingSlots > 0 ? Math.round(remaining / remainingSlots) : 0;
+    const bounded = Math.max(0, Math.min(itemMaxScore, average));
+    result.push(bounded);
+    remaining -= bounded;
+    remainingSlots -= 1;
+  }
+
+  return result;
+}
+
+/**
+ * @param {Object} config
+ * @param {number} score
+ * @returns {string}
+ */
+function resolveScaleScreeningSampleOptionLabel_(config, score) {
+  const labels = config.optionLabels || [];
+  const index = Math.max(0, Math.min(labels.length - 1, Math.round(score)));
+  return labels[index] || String(score);
+}
+
+/**
+ * @param {number} offsetDays
+ * @returns {string}
+ */
+function getScaleSampleDateText_(offsetDays) {
+  const baseDate = new Date("2025-10-07T09:00:00+09:00");
+  baseDate.setDate(baseDate.getDate() + Number(offsetDays || 0));
+  return Utilities.formatDate(baseDate, "Asia/Seoul", "yyyy-MM-dd");
+}
+
+/**
+ * @param {string} birthDateText
+ * @returns {string}
+ */
+function getScaleScreeningSampleAgeGroup_(birthDateText) {
+  const year = Number(String(birthDateText || "").slice(0, 4));
+  if (!Number.isFinite(year)) {
+    return "";
+  }
+
+  const age = 2026 - year;
+  if (age < 20) return "10대";
+  if (age < 30) return "20대";
+  if (age < 40) return "30대";
+  if (age < 50) return "40대";
+  if (age < 60) return "50대";
+  return "60대";
 }
