@@ -174,7 +174,8 @@ const SCALE_SCREENING_SYNC_CONFIG = {
 
 const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v10";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
-const SCALE_SCREENING_DISPLAY_VERSION = "2026-03-27-v3";
+const SCALE_SCREENING_TIMEZONE = "Asia/Seoul";
+const SCALE_SCREENING_DISPLAY_VERSION = "2026-03-27-v4";
 const SCALE_SCREENING_HEADER_KEY_ALIASES = {
   "기록ID": "record_id",
   "전송시각": "exported_at",
@@ -2122,6 +2123,7 @@ function formatScaleScreeningSyncSheet_(sheet, columnCount) {
 }
 
 function applyScaleScreeningDisplayFormats_() {
+  ensureScaleScreeningSpreadsheetTimezone_();
   normalizeScaleScreeningDisplayValues_();
 
   const formatTargets = [
@@ -2142,6 +2144,13 @@ function applyScaleScreeningDisplayFormats_() {
       sheet.getRange(rangeA1).setNumberFormat(target.formats[rangeA1]);
     });
   });
+}
+
+function ensureScaleScreeningSpreadsheetTimezone_() {
+  const spreadsheet = getScaleScreeningTargetSpreadsheet_();
+  if (spreadsheet.getSpreadsheetTimeZone() !== SCALE_SCREENING_TIMEZONE) {
+    spreadsheet.setSpreadsheetTimeZone(SCALE_SCREENING_TIMEZONE);
+  }
 }
 
 function normalizeScaleScreeningDisplayValues_() {
