@@ -48,6 +48,7 @@ function buildDashboard_(existingSheet) {
     spreadsheet.insertSheet(getScaleScreeningDashboardSheetName_());
 
   buildScaleScreeningDashboardSheet_(dashboardSheet);
+  repairScaleDashboardSummaryCards_(dashboardSheet);
 
   return {
     dashboardSheetName: dashboardSheet.getName(),
@@ -92,4 +93,35 @@ function getDashboardSnapshot() {
     firstLongitudinalScale: longitudinalRows.length ? normalizeText_(longitudinalRows[0][1]) : "",
     firstDeltaText: longitudinalRows.length ? normalizeText_(longitudinalRows[0][6]) : ""
   };
+}
+
+function repairScaleDashboardSummaryCards_(sheet) {
+  const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
+  const startRow = dashboardConfig.detailStartRow;
+  const rowCount = Math.max(1, sheet.getLastRow() - startRow + 1);
+  const rows = sheet.getRange(startRow, 1, rowCount, 10).getDisplayValues().filter(function(row) {
+    return normalizeText_(row[0]) && normalizeText_(row[0]) !== "검색 결과가 없습니다.";
+  });
+
+  const inspectionCount = rows.length;
+  const latestSessionDate = rows.length
+    ? rows.map(function(row) { return normalizeText_(row[0]); }).sort().slice(-1)[0]
+    : "-";
+  const normalizedScores = rows
+    .map(function(row) {
+      const parsed = Number(String(row[3]).replace(/,/g, ""));
+      return Number.isFinite(parsed) ? parsed : null;
+    })
+    .filter(function(value) { return value !== null; });
+  const averageNormalizedScore = normalizedScores.length
+    ? (normalizedScores.reduce(function(total, value) { return total + value; }, 0) / normalizedScores.length).toFixed(1)
+    : "-";
+  const scaleCount = rows.length
+    ? new Set(rows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
+    : 0;
+
+  sheet.getRange("A7:C9").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
+  sheet.getRange("D7:F9").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
+  sheet.getRange("G7:I9").setValue("평균 정규화점수\n" + averageNormalizedScore);
+  sheet.getRange("J7:L9").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
 }

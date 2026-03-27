@@ -1476,14 +1476,10 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange("A4").setValue("대상자 선택");
   sheet.getRange("B4:F4").merge();
   sheet.getRange("G4:L5").merge().setValue("드롭다운에서 대상자와 생년월일을 선택하세요. 아래 종단현황 표는 척도별로 묶은 뒤 각 척도 안에서 검사일 오름차순으로 정렬되며, 직전 검사 대비 증감과 변화 방향을 함께 보여줍니다.");
-  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + clientSelectionFormula + '=$B$4))&"건","0건"))');
-  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + clientSelectionFormula + '=$B$4),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
-  sheet.getRange("G7:I9").merge().setFormula(
-    `=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(${workerSheetRef}!F2:F,${clientSelectionFormula}=$B$4,${workerSheetRef}!F2:F<>"")),1),"0.0"),"-"))`
-  );
-  sheet.getRange("J7:L9").merge().setFormula(
-    `=IF($B$4="","검사 척도 수"&CHAR(10)&"-","검사 척도 수"&CHAR(10)&IFERROR(COUNTA(UNIQUE(FILTER(${workerSheetRef}!D2:D,${clientSelectionFormula}=$B$4,${workerSheetRef}!D2:D<>"")))&"종","0종"))`
-  );
+  sheet.getRange("A7:C9").merge().setValue("검사 건수\n-");
+  sheet.getRange("D7:F9").merge().setValue("최근 검사일\n-");
+  sheet.getRange("G7:I9").merge().setValue("평균 정규화점수\n-");
+  sheet.getRange("J7:L9").merge().setValue("검사 척도 수\n-");
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "직전점수", "증감", "변화", "결과구간", "담당자", "비고"]]);
   sheet.getRange("A11:L11").merge().setValue("검사별 종단현황");
   sheet.getRange(namesHelperLetter + "1").setValue("대상자 목록");
@@ -1524,7 +1520,8 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   if (selectedClientSelection) {
     clientNameRange.setValue(selectedClientSelection);
   }
-  populateScaleScreeningDashboardLongitudinalRows_(sheet, normalizeText_(clientNameRange.getDisplayValue()));
+  const longitudinalRows = populateScaleScreeningDashboardLongitudinalRows_(sheet, normalizeText_(clientNameRange.getDisplayValue()));
+  renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows);
 
   sheet.setFrozenRows(detailHeaderRow);
   sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
@@ -1571,6 +1568,7 @@ function populateScaleScreeningDashboardLongitudinalRows_(sheet, clientName) {
 
   ensureSheetSize_(sheet, Math.max(sheet.getMaxRows(), detailStartRow + outputRows.length + 10), dashboardConfig.namesHelperColumn);
   sheet.getRange(detailStartRow, 1, outputRows.length, 10).setValues(outputRows);
+  return longitudinalRows;
 }
 
 function getScaleScreeningDashboardLongitudinalRows_(clientSelection) {
@@ -1811,6 +1809,67 @@ function getExistingRowNumberMap_(sheet, headers, keyField) {
   });
 
   return result;
+}
+
+function renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows) {
+  const rows = Array.isArray(longitudinalRows) ? longitudinalRows : [];
+  const validRows = rows.filter(function(row) {
+    return normalizeText_(row[0]) && normalizeText_(row[0]) !== "검색 결과가 없습니다.";
+  });
+
+  const inspectionCount = validRows.length;
+  const latestSessionDate = validRows.length
+    ? validRows
+        .map(function(row) { return formatScaleDashboardDateDisplay_(row[0]); })
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0]
+    : "-";
+  const normalizedScores = validRows
+    .map(function(row) { return parseScaleDashboardNumber_(row[3]); })
+    .filter(function(score) { return score !== null; });
+  const averageNormalizedScore = normalizedScores.length
+    ? Number((normalizedScores.reduce(function(total, score) { return total + score; }, 0) / normalizedScores.length).toFixed(1))
+    : null;
+  const scaleCount = validRows.length
+    ? new Set(validRows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
+    : 0;
+
+  sheet.getRange("A7:C9").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
+  sheet.getRange("D7:F9").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
+  sheet.getRange("G7:I9").setValue("평균 정규화점수\n" + (averageNormalizedScore === null ? "-" : averageNormalizedScore.toFixed(1)));
+  sheet.getRange("J7:L9").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
+}
+
+function formatScaleDashboardDateDisplay_(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return Utilities.formatDate(value, "Asia/Seoul", "yyyy-MM-dd");
+  }
+
+  const normalizedValue = normalizeText_(value);
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  const numericValue = Number(normalizedValue);
+  if (Number.isFinite(numericValue)) {
+    const spreadsheetEpoch = new Date(Date.UTC(1899, 11, 30));
+    const convertedDate = new Date(spreadsheetEpoch.getTime() + numericValue * 24 * 60 * 60 * 1000);
+    if (!Number.isNaN(convertedDate.getTime())) {
+      return Utilities.formatDate(convertedDate, "Asia/Seoul", "yyyy-MM-dd");
+    }
+  }
+
+  const parsedDate = new Date(normalizedValue);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return Utilities.formatDate(parsedDate, "Asia/Seoul", "yyyy-MM-dd");
+  }
+
+  return normalizedValue;
 }
 
 function getScaleScreeningDashboardClientSelections_(workerSheet) {
