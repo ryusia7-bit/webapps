@@ -169,7 +169,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     ["문항 마스터 시트", "척도문항마스터", "문항 정의 시트"],
     ["선택지 마스터 시트", "척도선택지마스터", "선택지 정의 시트"],
     ["검색 사용법", "대상자명을 입력", "척도대시보드 B4에 대상자명을 입력하면 비교표와 그래프가 갱신됩니다."],
-    ["생년월일 필터", "선택 입력", "동명이인 구분이 필요할 때 척도대시보드 E4에 생년월일을 입력합니다."]
+    ["검색 기준", "이름만 사용", "현재 척도대시보드는 대상자 이름만 기준으로 비교합니다."]
   ]
 };
 
@@ -532,7 +532,7 @@ function searchScaleScreeningRecords_(params) {
     const limit = Math.min(Math.max(parseInt(params.limit, 10) || 200, 1), 500);
 
     if (!nameQuery && !birthDateQuery) {
-      throw new Error("대상자 이름 또는 생년월일을 입력해주세요.");
+      throw new Error("대상자 이름을 입력해주세요.");
     }
 
     const recordSheet = getScaleScreeningSheetIfExists_(getScaleScreeningRecordSheetName_());
@@ -1353,9 +1353,6 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const hiddenColumnsEnd = Number(dashboardConfig.hiddenColumnsEnd || dashboardConfig.namesHelperColumn || 40);
   const hiddenColumnCount = Math.max(1, hiddenColumnsEnd - dashboardConfig.trendStartColumn + 1);
   const chartEndColumnLetter = columnToLetterScale_(hiddenColumnsEnd);
-  const birthFilterFormula = 'IF($E$4="",' +
-    workerSheetRef + '!A2:A<>"",' +
-    'TEXT(' + workerSheetRef + '!C2:C,"yyyy-mm-dd")=TEXT($E$4,"yyyy-mm-dd"))';
   const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
@@ -1368,8 +1365,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     workerSheetRef + '!K2:K,' +
     workerSheetRef + '!L2:L' +
     "}," +
-    workerSheetRef + '!B2:B=$B$4,' +
-    birthFilterFormula +
+    workerSheetRef + '!B2:B=$B$4' +
     "),1,TRUE),{\"검색 결과가 없습니다.\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\"}))";
   const trendFormula = "=IF($B$4=\"\",\"\",IFERROR(QUERY(FILTER({" +
     workerSheetRef + '!A2:A,' +
@@ -1378,8 +1374,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     workerSheetRef + '!B2:B,' +
     workerSheetRef + '!C2:C' +
     "}," +
-    workerSheetRef + '!B2:B=$B$4,' +
-    birthFilterFormula +
+    workerSheetRef + '!B2:B=$B$4' +
     "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
 
   sheet.clear();
@@ -1387,24 +1382,20 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.setHiddenGridlines(true);
 
   sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
-  sheet.getRange("A2:L2").merge().setValue("대상자명과 생년월일을 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다.");
+  sheet.getRange("A2:L2").merge().setValue("대상자명을 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다.");
   sheet.getRange("A4").setValue("대상자명");
-  sheet.getRange("D4").setValue("생년월일");
-  sheet.getRange("B4:C4").merge();
-  sheet.getRange("E4:F4").merge();
-  sheet.getRange("G4:L5").merge().setValue("동명이인은 생년월일을 함께 입력하면 정확한 비교가 가능합니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
-  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '))&"건","0건"))');
-  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
-  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + ',' + workerSheetRef + '!F2:F<>"")),1),"0.0"),"-"))');
-  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4,' + birthFilterFormula + '),"<>")&"건","0건"))');
+  sheet.getRange("B4:F4").merge();
+  sheet.getRange("G4:L5").merge().setValue("대상자 이름만 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
+  sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4))&"건","0건"))');
+  sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
+  sheet.getRange("G7:I9").merge().setFormula('=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(' + workerSheetRef + '!F2:F,' + workerSheetRef + '!B2:B=$B$4,' + workerSheetRef + '!F2:F<>"')),1),"0.0"),"-"))');
+  sheet.getRange("J7:L9").merge().setFormula('=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(' + workerSheetRef + '!K2:K,' + workerSheetRef + '!B2:B=$B$4),"<>")&"건","0건"))');
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
   sheet.getRange(trendHeaderCell).setValue("점수 변화 그래프 데이터");
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
 
   sheet.getRange(dashboardConfig.clientNameCell).clearDataValidations();
-  sheet.getRange(dashboardConfig.birthDateCell).setNumberFormat("yyyy-mm-dd");
-  sheet.getRange("B4:C4").setBackground("#ffffff");
-  sheet.getRange("E4:F4").setBackground("#ffffff");
+  sheet.getRange("B4:F4").setBackground("#ffffff");
   sheet.getRange("A" + String(detailStartRow)).setFormula(detailFormula);
   sheet.getRange(trendFormulaCell).setFormula(trendFormula);
   sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
