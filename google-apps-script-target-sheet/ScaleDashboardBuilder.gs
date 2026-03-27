@@ -62,10 +62,10 @@ function buildDashboard_(existingSheet) {
  * @returns {{
  *   selectedClient:string,
  *   chartCount:number,
- *   detailRowCount:number,
- *   trendHeaderCount:number,
- *   firstTrendDate:string,
- *   firstTrendSeries:string
+ *   longitudinalRowCount:number,
+ *   firstLongitudinalDate:string,
+ *   firstLongitudinalScale:string,
+ *   firstDeltaText:string
  * }}
  */
 function getDashboardSnapshot() {
@@ -75,7 +75,7 @@ function getDashboardSnapshot() {
   }
 
   const dashboardConfig = SCALE_SCREENING_SYNC_CONFIG.dashboard;
-  const detailRows = sheet.getRange(
+  const longitudinalRows = sheet.getRange(
     dashboardConfig.detailStartRow,
     1,
     Math.max(1, 220 - dashboardConfig.detailStartRow),
@@ -83,27 +83,13 @@ function getDashboardSnapshot() {
   ).getDisplayValues().filter(function(row) {
     return row.some(Boolean);
   });
-  const trendHeaders = sheet.getRange(
-    dashboardConfig.trendStartRow,
-    dashboardConfig.trendStartColumn,
-    1,
-    12
-  ).getDisplayValues()[0].filter(Boolean);
-  const trendData = sheet.getRange(
-    dashboardConfig.trendStartRow + 1,
-    dashboardConfig.trendStartColumn,
-    40,
-    12
-  ).getDisplayValues().filter(function(row) {
-    return row.some(Boolean);
-  });
 
   return {
     selectedClient: normalizeText_(sheet.getRange(dashboardConfig.clientNameCell).getDisplayValue()),
     chartCount: sheet.getCharts().length,
-    detailRowCount: detailRows.length,
-    trendHeaderCount: trendHeaders.length,
-    firstTrendDate: trendData.length ? normalizeText_(trendData[0][0]) : "",
-    firstTrendSeries: trendHeaders.length > 1 ? normalizeText_(trendHeaders[1]) : ""
+    longitudinalRowCount: longitudinalRows.length,
+    firstLongitudinalDate: longitudinalRows.length ? normalizeText_(longitudinalRows[0][0]) : "",
+    firstLongitudinalScale: longitudinalRows.length ? normalizeText_(longitudinalRows[0][1]) : "",
+    firstDeltaText: longitudinalRows.length ? normalizeText_(longitudinalRows[0][6]) : ""
   };
 }

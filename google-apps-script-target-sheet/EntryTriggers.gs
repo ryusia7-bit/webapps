@@ -18,6 +18,35 @@ function onInstall(e) {
   onOpen(e);
 }
 
+function onEdit(e) {
+  try {
+    if (handleScaleDashboardEdit_(e)) {
+      return;
+    }
+  } catch (error) {
+    console.error("척도대시보드 자동 갱신 실패:", error);
+  }
+}
+
+function handleScaleDashboardEdit_(e) {
+  if (!e || !e.range) {
+    return false;
+  }
+
+  const editedRange = e.range;
+  const editedSheet = editedRange.getSheet();
+  if (editedSheet.getName() !== getScaleScreeningDashboardSheetName_()) {
+    return false;
+  }
+
+  if (editedRange.getA1Notation() !== SCALE_SCREENING_SYNC_CONFIG.dashboard.clientNameCell) {
+    return false;
+  }
+
+  buildDashboard();
+  return true;
+}
+
 function addCustomMenu() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu(APP_CONFIG.menuTitle)
