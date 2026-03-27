@@ -172,8 +172,9 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ]
 };
 
-const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v8";
+const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v10";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
+const SCALE_SCREENING_DISPLAY_VERSION = "2026-03-27-v3";
 const SCALE_SCREENING_HEADER_KEY_ALIASES = {
   "기록ID": "record_id",
   "전송시각": "exported_at",
@@ -239,6 +240,55 @@ const SCALE_SCREENING_HEADER_KEY_ALIASES = {
   "선택지라벨": "option_label",
   "선택지점수": "option_score",
   "선택지JSON": "option_json"
+};
+
+const SCALE_SCREENING_SYNC_SCOPE_LABELS = {
+  apps_script_webapp: "앱 검사",
+  history_all: "전체 이력",
+  history_single: "개별 이력",
+  sample_seed: "샘플 데이터",
+  sample_data: "샘플 데이터"
+};
+
+const SCALE_SCREENING_SOURCE_APP_LABELS = {
+  "mindmap-dashiseogi-apps-script-webapp": "MindMap 웹앱",
+  "github-pages-scale-webapp": "공개 웹앱",
+  "scale_screening_sample_seed": "샘플 시드",
+  "apps_script_webapp": "Apps Script 웹앱"
+};
+
+const SCALE_SCREENING_GENDER_LABELS = {
+  male: "남",
+  female: "여",
+  m: "남",
+  f: "여"
+};
+
+const SCALE_SCREENING_AGE_GROUP_LABELS = {
+  "10s": "10대",
+  "20s": "20대",
+  "30s": "30대",
+  "40s": "40대",
+  "50s": "50대",
+  "60s": "60대"
+};
+
+const SCALE_SCREENING_FIELD_SCOPE_LABELS = {
+  respondent: "응답자정보",
+  question: "문항",
+  subquestion: "하위문항"
+};
+
+const SCALE_SCREENING_FIELD_TYPE_LABELS = {
+  single_choice: "단일선택",
+  multiple_choice: "다중선택",
+  text: "텍스트",
+  number: "숫자"
+};
+
+const SCALE_SCREENING_SCORING_TYPE_LABELS = {
+  sum: "합산",
+  custom: "맞춤"
 };
 
 function setupScaleScreeningSyncSheets() {
@@ -1001,7 +1051,7 @@ function buildScaleScreeningQuestionnaireRow_(questionnaire) {
     source_reference_page: toCellText_(questionnaire.source && questionnaire.source.referencePage),
     source_institution: toCellText_(questionnaire.source && questionnaire.source.institution),
     source_citation: toCellText_(questionnaire.source && questionnaire.source.citation),
-    scoring_type: toCellText_(questionnaire.scoring && questionnaire.scoring.type),
+    scoring_type: localizeScaleScoringType_(toCellText_(questionnaire.scoring && questionnaire.scoring.type)),
     scoring_json: safeStringifyScaleValue_(questionnaire.scoring || {}),
     extraction_notes_json: safeStringifyScaleValue_(questionnaire.extractionNotes || []),
     questionnaire_json: safeStringifyScaleValue_(questionnaire)
@@ -1052,14 +1102,14 @@ function buildScaleFieldRow_(questionnaire, fieldScope, parentFieldId, field) {
   return {
     field_key: toCellText_(questionnaire.id) + "::" + fieldScope + "::" + toCellText_(field.id),
     questionnaire_id: toCellText_(questionnaire.id),
-    field_scope: fieldScope,
+    field_scope: localizeScaleFieldScope_(fieldScope),
     parent_field_id: toCellText_(parentFieldId),
     field_id: toCellText_(field.id),
     field_number: toCellText_(field.number),
     field_label: toCellText_(field.label),
     field_text: toCellText_(field.text),
-    field_type: toCellText_(field.type || "single_choice"),
-    is_required: field.required ? "Y" : "N",
+    field_type: localizeScaleFieldType_(toCellText_(field.type || "single_choice")),
+    is_required: field.required ? "예" : "아니오",
     option_count: String((field.options || []).length),
     field_json: safeStringifyScaleValue_(field)
   };
@@ -1075,7 +1125,7 @@ function buildScaleOptionRowsForField_(questionnaire, fieldScope, parentFieldId,
         String(index + 1)
       ].join("::"),
       questionnaire_id: toCellText_(questionnaire.id),
-      field_scope: fieldScope,
+      field_scope: localizeScaleFieldScope_(fieldScope),
       parent_field_id: toCellText_(parentFieldId),
       field_id: toCellText_(field.id),
       option_order: String(index + 1),
@@ -1097,13 +1147,13 @@ function buildScaleScreeningRecordRow_(record, payload) {
 
   return {
     record_id: toCellText_(record.id),
-    exported_at: toCellText_(payload.sentAt),
-    sync_scope: toCellText_(payload.syncScope),
-    source_app: toCellText_(payload.source),
+    exported_at: formatScaleDateTimeDisplay_(toCellText_(payload.sentAt)),
+    sync_scope: localizeScaleSyncScope_(toCellText_(payload.syncScope)),
+    source_app: localizeScaleSourceApp_(toCellText_(payload.source)),
     organization_name: toCellText_(payload.appSettings && payload.appSettings.organizationName),
     team_name: toCellText_(payload.appSettings && payload.appSettings.teamName),
     contact_note: toCellText_(payload.appSettings && payload.appSettings.contactNote),
-    record_created_at: toCellText_(record.createdAt),
+    record_created_at: formatScaleDateTimeDisplay_(toCellText_(record.createdAt)),
     session_date: toCellText_(record.meta && record.meta.sessionDate),
     questionnaire_id: toCellText_(record.questionnaireId),
     questionnaire_title: toCellText_(record.questionnaireTitle),
@@ -1114,13 +1164,13 @@ function buildScaleScreeningRecordRow_(record, payload) {
     worker_name: toCellText_(record.meta && record.meta.workerName),
     client_label: toCellText_(record.meta && record.meta.clientLabel),
     birth_date: toCellText_(record.meta && record.meta.birthDate),
-    gender: findDisplayValueByLabel_(respondentDisplay, "성별"),
-    age_group: findDisplayValueByLabel_(respondentDisplay, "연령대"),
+    gender: localizeScaleGender_(findDisplayValueByLabel_(respondentDisplay, "성별")),
+    age_group: localizeScaleAgeGroup_(findDisplayValueByLabel_(respondentDisplay, "연령대")),
     progress_summary: buildScaleScreeningProgressSummary_(record && record.progress ? record.progress : {}),
     progress_percent: (record && record.progress && record.progress.percent !== null && record.progress.percent !== undefined) ? String(record.progress.percent) : "",
     progress_answered: (record && record.progress && record.progress.answered !== null && record.progress.answered !== undefined) ? String(record.progress.answered) : "",
     progress_total: (record && record.progress && record.progress.total !== null && record.progress.total !== undefined) ? String(record.progress.total) : "",
-    signature_present: record.meta && record.meta.signatureDataUrl ? "Y" : "N",
+    signature_present: record.meta && record.meta.signatureDataUrl ? "있음" : "없음",
     session_note: toCellText_(record.meta && record.meta.sessionNote),
     highlights: joinScaleTextList_(record.evaluation && record.evaluation.highlights),
     flags: joinScaleTextList_(flags),
@@ -1168,14 +1218,14 @@ function buildScaleScreeningAnswerRows_(record, payload) {
     rows.push({
       detail_key: parentKey,
       record_id: toCellText_(record.id),
-      exported_at: toCellText_(payload.sentAt),
+      exported_at: formatScaleDateTimeDisplay_(toCellText_(payload.sentAt)),
       session_date: toCellText_(record.meta && record.meta.sessionDate),
       questionnaire_id: toCellText_(record.questionnaireId),
       questionnaire_title: toCellText_(record.questionnaireTitle),
       worker_name: toCellText_(record.meta && record.meta.workerName),
       client_label: toCellText_(record.meta && record.meta.clientLabel),
       birth_date: toCellText_(record.meta && record.meta.birthDate),
-      is_subquestion: "N",
+      is_subquestion: "아니오",
       parent_question_id: "",
       question_id: toCellText_(item.id || item.number),
       question_number: toCellText_(item.number),
@@ -1189,14 +1239,14 @@ function buildScaleScreeningAnswerRows_(record, payload) {
       rows.push({
         detail_key: parentKey + "::sub::" + String(index + 1),
         record_id: toCellText_(record.id),
-        exported_at: toCellText_(payload.sentAt),
+        exported_at: formatScaleDateTimeDisplay_(toCellText_(payload.sentAt)),
         session_date: toCellText_(record.meta && record.meta.sessionDate),
         questionnaire_id: toCellText_(record.questionnaireId),
         questionnaire_title: toCellText_(record.questionnaireTitle),
         worker_name: toCellText_(record.meta && record.meta.workerName),
         client_label: toCellText_(record.meta && record.meta.clientLabel),
         birth_date: toCellText_(record.meta && record.meta.birthDate),
-        is_subquestion: "Y",
+        is_subquestion: "예",
         parent_question_id: toCellText_(item.id || item.number),
         question_id: (toCellText_(item.id || item.number) + "::sub::" + String(index + 1)),
         question_number: toCellText_(subItem.number),
@@ -1751,6 +1801,81 @@ function getScaleScreeningHeaderKey_(header) {
   return SCALE_SCREENING_HEADER_KEY_ALIASES[normalizedHeader] || normalizedHeader;
 }
 
+function localizeScaleSyncScope_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_SYNC_SCOPE_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleSourceApp_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_SOURCE_APP_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleGender_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_GENDER_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleAgeGroup_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_AGE_GROUP_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleSignature_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  if (normalizedValue === "y" || normalizedValue === "yes" || normalizedValue === "true") {
+    return "있음";
+  }
+  if (normalizedValue === "n" || normalizedValue === "no" || normalizedValue === "false") {
+    return "없음";
+  }
+  return value;
+}
+
+function localizeScaleSubquestionFlag_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  if (normalizedValue === "y" || normalizedValue === "yes" || normalizedValue === "true") {
+    return "예";
+  }
+  if (normalizedValue === "n" || normalizedValue === "no" || normalizedValue === "false") {
+    return "아니오";
+  }
+  return value;
+}
+
+function localizeScaleRequiredFlag_(value) {
+  return localizeScaleSubquestionFlag_(value);
+}
+
+function localizeScaleFieldScope_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_FIELD_SCOPE_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleFieldType_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_FIELD_TYPE_LABELS[normalizedValue] || value;
+}
+
+function localizeScaleScoringType_(value) {
+  const normalizedValue = normalizeText_(value).toLowerCase();
+  return SCALE_SCREENING_SCORING_TYPE_LABELS[normalizedValue] || value;
+}
+
+function formatScaleDateTimeDisplay_(value) {
+  const normalizedValue = normalizeText_(value);
+  if (!normalizedValue) {
+    return "";
+  }
+
+  const parsed = new Date(normalizedValue);
+  if (!Number.isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, "Asia/Seoul", "yyyy-MM-dd HH:mm");
+  }
+
+  return value;
+}
+
 function ensureScaleScreeningSyncSheet_(sheetName, headers) {
   const sheet = getOrCreateScaleScreeningSheet_(sheetName);
   const normalizedHeaders = headers.map(function(header) {
@@ -1883,6 +2008,8 @@ function formatScaleScreeningSyncSheet_(sheet, columnCount) {
 }
 
 function applyScaleScreeningDisplayFormats_() {
+  normalizeScaleScreeningDisplayValues_();
+
   const formatTargets = [
     { name: getScaleScreeningRecordSheetName_(), formats: { "H:H": "yyyy-mm-dd hh:mm", "I:I": "yyyy-mm-dd", "N:N": "0.0", "R:R": "yyyy-mm-dd" } },
     { name: getScaleScreeningAnswerSheetName_(), formats: { "C:C": "yyyy-mm-dd hh:mm", "D:D": "yyyy-mm-dd", "I:I": "yyyy-mm-dd" } },
@@ -1901,6 +2028,111 @@ function applyScaleScreeningDisplayFormats_() {
       sheet.getRange(rangeA1).setNumberFormat(target.formats[rangeA1]);
     });
   });
+}
+
+function normalizeScaleScreeningDisplayValues_() {
+  const properties = PropertiesService.getScriptProperties();
+  const currentVersion = normalizeText_(properties.getProperty("scale_screening_display_version"));
+  if (currentVersion === SCALE_SCREENING_DISPLAY_VERSION) {
+    return;
+  }
+
+  normalizeScaleScreeningRecordSheetValues_();
+  normalizeScaleScreeningAnswerSheetValues_();
+  normalizeScaleScreeningQuestionnaireSheetValues_();
+  normalizeScaleScreeningFieldSheetValues_();
+  normalizeScaleScreeningOptionSheetValues_();
+
+  properties.setProperty("scale_screening_display_version", SCALE_SCREENING_DISPLAY_VERSION);
+}
+
+function normalizeScaleScreeningRecordSheetValues_() {
+  const sheet = getScaleScreeningSheetIfExists_(getScaleScreeningRecordSheetName_());
+  if (!sheet || sheet.getLastRow() < 2) {
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCALE_SCREENING_SYNC_CONFIG.recordHeaders.length);
+  const values = range.getDisplayValues();
+  const normalizedValues = values.map(function(row) {
+    const updatedRow = row.slice();
+    updatedRow[1] = formatScaleDateTimeDisplay_(row[1]);
+    updatedRow[2] = localizeScaleSyncScope_(row[2]);
+    updatedRow[3] = localizeScaleSourceApp_(row[3]);
+    updatedRow[7] = formatScaleDateTimeDisplay_(row[7]);
+    updatedRow[18] = localizeScaleGender_(row[18]);
+    updatedRow[19] = localizeScaleAgeGroup_(row[19]);
+    updatedRow[24] = localizeScaleSignature_(row[24]);
+    return updatedRow;
+  });
+  range.setValues(normalizedValues);
+}
+
+function normalizeScaleScreeningAnswerSheetValues_() {
+  const sheet = getScaleScreeningSheetIfExists_(getScaleScreeningAnswerSheetName_());
+  if (!sheet || sheet.getLastRow() < 2) {
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCALE_SCREENING_SYNC_CONFIG.answerHeaders.length);
+  const values = range.getDisplayValues();
+  const normalizedValues = values.map(function(row) {
+    const updatedRow = row.slice();
+    updatedRow[2] = formatScaleDateTimeDisplay_(row[2]);
+    updatedRow[9] = localizeScaleSubquestionFlag_(row[9]);
+    return updatedRow;
+  });
+  range.setValues(normalizedValues);
+}
+
+function normalizeScaleScreeningQuestionnaireSheetValues_() {
+  const sheet = getScaleScreeningSheetIfExists_(getScaleScreeningQuestionnaireSheetName_());
+  if (!sheet || sheet.getLastRow() < 2) {
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders.length);
+  const values = range.getDisplayValues();
+  const normalizedValues = values.map(function(row) {
+    const updatedRow = row.slice();
+    updatedRow[12] = localizeScaleScoringType_(row[12]);
+    return updatedRow;
+  });
+  range.setValues(normalizedValues);
+}
+
+function normalizeScaleScreeningFieldSheetValues_() {
+  const sheet = getScaleScreeningSheetIfExists_(getScaleScreeningFieldSheetName_());
+  if (!sheet || sheet.getLastRow() < 2) {
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCALE_SCREENING_SYNC_CONFIG.fieldHeaders.length);
+  const values = range.getDisplayValues();
+  const normalizedValues = values.map(function(row) {
+    const updatedRow = row.slice();
+    updatedRow[2] = localizeScaleFieldScope_(row[2]);
+    updatedRow[8] = localizeScaleFieldType_(row[8]);
+    updatedRow[9] = localizeScaleRequiredFlag_(row[9]);
+    return updatedRow;
+  });
+  range.setValues(normalizedValues);
+}
+
+function normalizeScaleScreeningOptionSheetValues_() {
+  const sheet = getScaleScreeningSheetIfExists_(getScaleScreeningOptionSheetName_());
+  if (!sheet || sheet.getLastRow() < 2) {
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, SCALE_SCREENING_SYNC_CONFIG.optionHeaders.length);
+  const values = range.getDisplayValues();
+  const normalizedValues = values.map(function(row) {
+    const updatedRow = row.slice();
+    updatedRow[2] = localizeScaleFieldScope_(row[2]);
+    return updatedRow;
+  });
+  range.setValues(normalizedValues);
 }
 
 function getScaleScreeningSyncToken_() {
