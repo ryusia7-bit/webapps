@@ -149,7 +149,7 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   dashboard: {
     clientNameCell: "B4",
     birthDateCell: "E4",
-    namesHelperColumn: 40,
+    namesHelperColumn: 60,
     detailHeaderRow: 31,
     detailStartRow: 32,
     trendStartRow: 2,
@@ -1378,7 +1378,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
 
   sheet.clear();
-  ensureSheetSize_(sheet, 320, hiddenColumnsEnd);
+  ensureSheetSize_(sheet, 320, Math.max(hiddenColumnsEnd, dashboardConfig.namesHelperColumn));
   sheet.setHiddenGridlines(true);
 
   sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
@@ -1479,6 +1479,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .build();
   sheet.insertChart(chart);
   sheet.hideColumns(dashboardConfig.trendStartColumn, hiddenColumnCount);
+  sheet.hideColumns(dashboardConfig.namesHelperColumn, 1);
 }
 
 function setScaleColumnWidths_(sheet, widths) {
