@@ -40,10 +40,14 @@
     records: [],
     chart: null,
     remoteDashboardRecords: [],
+    syncReadyCache: {
+      key: "",
+      checkedAt: 0
+    },
     syncSettings: {
       webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
       syncToken: "",
-      syncEnabled: false
+      syncEnabled: true
     },
     adminAuthenticated: false
   };
@@ -203,6 +207,10 @@
 
     state.adminAuthenticated = true;
     sessionStorage.setItem(STORAGE_KEYS.adminSession, "1");
+    if (ui.googleSyncEnabled && !ui.googleSyncEnabled.checked) {
+      ui.googleSyncEnabled.checked = true;
+      onGoogleSyncSettingsInput();
+    }
     if (ui.adminPassword) {
       ui.adminPassword.value = "";
     }
@@ -212,6 +220,7 @@
 
   function onAdminLogout() {
     state.adminAuthenticated = false;
+    state.syncReadyCache = { key: "", checkedAt: 0 };
     sessionStorage.removeItem(STORAGE_KEYS.adminSession);
     if (ui.adminUsername) {
       ui.adminUsername.value = "";
@@ -283,17 +292,18 @@
   function loadStoredSyncSettings() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.googleSync) || "{}");
+      const normalizedUrl = normalizeGoogleSyncUrl(parsed.webAppUrl || DEFAULT_GOOGLE_SYNC_URL);
       return {
-        webAppUrl: normalizeGoogleSyncUrl(parsed.webAppUrl || DEFAULT_GOOGLE_SYNC_URL),
+        webAppUrl: normalizedUrl,
         syncToken: typeof parsed.syncToken === "string" ? parsed.syncToken : "",
-        syncEnabled: Boolean(parsed.syncEnabled)
+        syncEnabled: Boolean(normalizedUrl)
       };
     } catch (error) {
       console.warn("구글 시트 연동 설정을 읽지 못했습니다.", error);
       return {
         webAppUrl: DEFAULT_GOOGLE_SYNC_URL,
         syncToken: "",
-        syncEnabled: false
+        syncEnabled: true
       };
     }
   }
@@ -304,6 +314,7 @@
       syncToken: ui.googleSyncToken.value.trim(),
       syncEnabled: Boolean(ui.googleSyncEnabled.checked)
     };
+    state.syncReadyCache = { key: "", checkedAt: 0 };
     localStorage.setItem(STORAGE_KEYS.googleSync, JSON.stringify(state.syncSettings));
     syncSheetControls();
 
@@ -318,7 +329,7 @@
     }
 
     if (!state.syncSettings.syncEnabled) {
-      setSyncStatus("설정은 저장되었습니다. 시트 기능 사용을 켜면 승인 사용자 전용 기능이 활성화됩니다.");
+      setSyncStatus("설정은 저장되었습니다. 시트 기능 사용이 꺼져 있어 저장과 조회는 잠시 중지됩니다.");
       return;
     }
 
@@ -358,7 +369,7 @@
   }
 
   function syncSheetControls() {
-    const enabled = Boolean(state.syncSettings.syncEnabled) && Boolean(state.adminAuthenticated);
+    const enabled = Boolean(state.adminAuthenticated);
     [
       ui.syncCurrentBtn,
       ui.syncQuestionnairesBtn,
@@ -372,9 +383,11 @@
       setSyncStatus("관리자 인증 후에만 구글 시트 연동 설정과 전송 기능을 사용할 수 있습니다.");
       return;
     }
-    if (!enabled) {
-      setSyncStatus("시트 기능 사용이 꺼져 있습니다. 일반 사용자는 검사와 기기 저장만 사용할 수 있습니다.");
+    if (!state.syncSettings.syncEnabled) {
+      setSyncStatus("시트 기능 사용이 꺼져 있습니다. 필요하면 다시 켜고 권한 승인 페이지를 열어주세요.");
+      return;
     }
+    setSyncStatus("구글 시트 연동 준비가 되었습니다. 권한 승인 후 저장 또는 상태 확인을 실행할 수 있습니다.");
   }
 
   function onOpenAuthorizePage() {
@@ -402,14 +415,6 @@
   }
 
   function validateGoogleSyncSettings(settings, options = {}) {
-    if (options.requireEnabled !== false && !settings?.syncEnabled) {
-      return {
-        ok: false,
-        message: "시트 기능 사용을 먼저 켜고, 권한 승인 페이지에서 Google 승인을 완료해주세요.",
-        focusTarget: ui.googleSyncEnabled
-      };
-    }
-
     if (!settings?.webAppUrl) {
       return {
         ok: false,
@@ -427,6 +432,37 @@
     }
 
     return { ok: true };
+  }
+
+  function buildSyncReadyCacheKey(settings) {
+    return [settings?.webAppUrl || "", settings?.syncToken || ""].join("|");
+  }
+
+  async function ensureGoogleSyncAuthorized(settings, forceRefresh = false) {
+    const cacheKey = buildSyncReadyCacheKey(settings);
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      state.syncReadyCache.key === cacheKey &&
+      now - state.syncReadyCache.checkedAt < 60 * 1000
+    ) {
+      return true;
+    }
+
+    const response = await requestGoogleSyncJsonp(settings.webAppUrl, {
+      action: "status",
+      token: settings.syncToken
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "구글 시트 권한 확인에 실패했습니다.");
+    }
+
+    state.syncReadyCache = {
+      key: cacheKey,
+      checkedAt: now
+    };
+    return true;
   }
 
   function setSyncStatus(message, type = "") {
@@ -1443,6 +1479,10 @@
 
     setSyncBusy(true, "척도 마스터를 시트에 전송하고 있습니다...");
     try {
+      if (!settings.syncEnabled) {
+        throw new Error("관리 탭에서 시트 기능 사용을 먼저 켜주세요.");
+      }
+      await ensureGoogleSyncAuthorized(settings);
       await postGoogleSyncPayload(buildQuestionnaireMasterPayload(settings.syncToken));
       setSyncStatus(`척도 마스터 ${state.manifest.length}개 전송 요청을 보냈습니다.`, "success");
     } catch (error) {
@@ -1465,6 +1505,9 @@
 
     setSyncBusy(true, "구글 시트 연동 상태를 확인하고 있습니다...");
     try {
+      if (!settings.syncEnabled) {
+        throw new Error("관리 탭에서 시트 기능 사용을 먼저 켜주세요.");
+      }
       const response = await requestGoogleSyncJsonp(settings.webAppUrl, {
         action: "status",
         token: settings.syncToken
@@ -1504,6 +1547,10 @@
     setSyncBusy(true, `${scopeLabel}를 구글 시트 DB로 전송하고 있습니다...`);
 
     try {
+      if (!settings.syncEnabled) {
+        throw new Error("관리 탭에서 시트 기능 사용을 먼저 켜주세요.");
+      }
+      await ensureGoogleSyncAuthorized(settings);
       const payload = buildGoogleSyncPayload(records, syncScope, settings.syncToken);
       await postGoogleSyncPayload(payload);
       setSyncStatus(`${scopeLabel} ${records.length}건 전송 요청을 보냈습니다.`, "success");
