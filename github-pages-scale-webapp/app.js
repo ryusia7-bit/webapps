@@ -12,6 +12,7 @@
     worker: "mindmap_scale_worker_v1",
     googleSync: "mindmap_scale_google_sync_v2"
   };
+  const SAMPLE_RECORDS_VERSION = "2026-03-27-sample-v1";
   const SCALE_COLORS = [
     "#126b57",
     "#f59e0b",
@@ -50,6 +51,7 @@
     bindEvents();
     loadBundle();
     loadSavedRecords();
+    ensureBundledSampleRecords();
     loadSyncSettings();
     restoreWorkerName();
     if (!ui.sessionDate.value) {
@@ -61,7 +63,7 @@
     renderRecordsTable();
     renderDashboard();
     updateSummary();
-    setHeroStatus("준비가 끝났습니다. 결과는 현재 브라우저에 저장됩니다.");
+    setHeroStatus("준비가 끝났습니다. 가명 기반 샘플 검사 결과 100건이 기본 포함되어 있습니다.");
   }
 
   function cacheUi() {
@@ -214,6 +216,18 @@
       console.warn("저장 결과를 읽지 못했습니다.", error);
       state.records = [];
     }
+  }
+
+  function ensureBundledSampleRecords() {
+    const sampleRecords = buildBundledSampleRecords();
+    if (!sampleRecords.length) {
+      return;
+    }
+
+    const nonSampleRecords = state.records.filter((record) => !record?.sampleData);
+    state.records = [...nonSampleRecords, ...sampleRecords]
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(state.records.slice(0, 1000)));
   }
 
   function persistRecords() {
@@ -1955,6 +1969,372 @@
       window.clearTimeout(timeoutId);
       timeoutId = window.setTimeout(() => callback(...args), delay);
     };
+  }
+
+  function buildBundledSampleRecords() {
+    const subjects = getBundledSampleSubjects();
+    const visitOffsets = [0, 28, 56, 84, 112];
+    const scheduleByCohort = {
+      mood: ["phq-9", "gad-7", "phq-9", "cri", "gad-7"],
+      stress: ["pss-10", "isi-k", "pss-10", "ies-r", "isi-k"],
+      risk: ["audit-k", "k-mdq", "audit-k", "mkpq-16", "cri"],
+      mixed: ["gad-7", "pss-10", "ies-r", "phq-9", "cri"]
+    };
+
+    return subjects.flatMap((subject, subjectIndex) => {
+      const schedule = scheduleByCohort[subject.cohort] || scheduleByCohort.mixed;
+      return schedule.map((scaleId, visitIndex) =>
+        buildBundledSampleRecord(subject, subjectIndex, visitIndex, scaleId, visitOffsets[visitIndex] || 0)
+      );
+    });
+  }
+
+  function getBundledSampleSubjects() {
+    return [
+      { name: "가온01", birthDate: "1984-03-18", gender: "남", cohort: "mood", workerName: "상담자 해봄", baseRisk: 72, trend: -6, wave: 4 },
+      { name: "다온02", birthDate: "1992-11-05", gender: "여", cohort: "mood", workerName: "상담자 윤슬", baseRisk: 48, trend: 3, wave: 7 },
+      { name: "라온03", birthDate: "1988-07-21", gender: "여", cohort: "mood", workerName: "상담자 해봄", baseRisk: 64, trend: -4, wave: 5 },
+      { name: "마루04", birthDate: "1979-01-09", gender: "남", cohort: "mood", workerName: "상담자 이든", baseRisk: 58, trend: 1, wave: 6 },
+      { name: "보람05", birthDate: "1995-05-14", gender: "여", cohort: "stress", workerName: "상담자 윤슬", baseRisk: 62, trend: -2, wave: 8 },
+      { name: "새론06", birthDate: "1981-09-02", gender: "남", cohort: "stress", workerName: "상담자 이든", baseRisk: 54, trend: 2, wave: 5 },
+      { name: "시우07", birthDate: "1974-12-27", gender: "남", cohort: "stress", workerName: "상담자 해봄", baseRisk: 69, trend: -5, wave: 4 },
+      { name: "아라08", birthDate: "1987-06-11", gender: "여", cohort: "risk", workerName: "상담자 윤슬", baseRisk: 71, trend: -3, wave: 6 },
+      { name: "연우09", birthDate: "1990-10-30", gender: "여", cohort: "risk", workerName: "상담자 이든", baseRisk: 44, trend: 5, wave: 7 },
+      { name: "우람10", birthDate: "1983-02-16", gender: "남", cohort: "risk", workerName: "상담자 해봄", baseRisk: 66, trend: -1, wave: 5 },
+      { name: "은솔11", birthDate: "1994-08-03", gender: "여", cohort: "mixed", workerName: "상담자 다해", baseRisk: 52, trend: 2, wave: 6 },
+      { name: "이룸12", birthDate: "1986-04-25", gender: "남", cohort: "mixed", workerName: "상담자 다해", baseRisk: 59, trend: -2, wave: 5 },
+      { name: "자온13", birthDate: "1978-09-19", gender: "남", cohort: "stress", workerName: "상담자 윤슬", baseRisk: 61, trend: -1, wave: 7 },
+      { name: "차온14", birthDate: "1997-12-12", gender: "여", cohort: "mood", workerName: "상담자 이든", baseRisk: 46, trend: 4, wave: 6 },
+      { name: "카이15", birthDate: "1989-03-07", gender: "남", cohort: "risk", workerName: "상담자 다해", baseRisk: 68, trend: -4, wave: 5 },
+      { name: "타라16", birthDate: "1993-06-28", gender: "여", cohort: "mixed", workerName: "상담자 해봄", baseRisk: 57, trend: 1, wave: 4 },
+      { name: "하람17", birthDate: "1980-11-23", gender: "남", cohort: "stress", workerName: "상담자 다해", baseRisk: 63, trend: -3, wave: 5 },
+      { name: "하나18", birthDate: "1991-01-30", gender: "여", cohort: "mood", workerName: "상담자 해봄", baseRisk: 55, trend: 2, wave: 7 },
+      { name: "호연19", birthDate: "1985-05-08", gender: "남", cohort: "mixed", workerName: "상담자 윤슬", baseRisk: 60, trend: -2, wave: 6 },
+      { name: "희원20", birthDate: "1996-09-14", gender: "여", cohort: "risk", workerName: "상담자 이든", baseRisk: 50, trend: 3, wave: 8 }
+    ];
+  }
+
+  function getBundledSampleScaleConfigs() {
+    return {
+      "phq-9": {
+        title: "우울(PHQ-9)",
+        shortTitle: "PHQ-9",
+        maxScore: 27,
+        itemCount: 4,
+        itemMaxScore: 3,
+        scaleBias: 8,
+        optionLabels: ["없음", "2~6일", "7~12일", "거의 매일"],
+        questionLabels: ["기분 저하", "흥미 감소", "수면 문제", "집중 어려움"],
+        bands: [
+          { min: 0, max: 4, label: "낮음", description: "우울 증상 수준이 낮은 편입니다." },
+          { min: 5, max: 9, label: "경도", description: "가벼운 우울 증상이 시사됩니다." },
+          { min: 10, max: 14, label: "중등도", description: "중등도 수준의 우울 증상이 시사됩니다." },
+          { min: 15, max: 19, label: "중등고도", description: "임상적 평가가 필요한 수준의 우울 증상이 시사됩니다." },
+          { min: 20, max: 27, label: "고도", description: "높은 수준의 우울 증상이 시사됩니다." }
+        ]
+      },
+      "gad-7": {
+        title: "불안(GAD-7)",
+        shortTitle: "GAD-7",
+        maxScore: 21,
+        itemCount: 4,
+        itemMaxScore: 3,
+        scaleBias: 6,
+        optionLabels: ["없음", "2~6일", "7~12일", "거의 매일"],
+        questionLabels: ["초조함", "걱정 통제 어려움", "과도한 염려", "긴장/예민함"],
+        bands: [
+          { min: 0, max: 4, label: "낮음", description: "불안 증상 수준이 낮은 편입니다." },
+          { min: 5, max: 9, label: "경도", description: "가벼운 불안 증상이 시사됩니다." },
+          { min: 10, max: 14, label: "중등도", description: "중등도 수준의 불안 증상이 시사됩니다." },
+          { min: 15, max: 21, label: "고도", description: "높은 수준의 불안 증상이 시사됩니다." }
+        ]
+      },
+      "pss-10": {
+        title: "스트레스(PSS)",
+        shortTitle: "PSS",
+        maxScore: 40,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 5,
+        optionLabels: ["전혀 없음", "거의 없음", "가끔", "자주", "매우 자주"],
+        questionLabels: ["압박감", "예상 못한 일", "통제감 저하", "피로 누적"],
+        bands: [
+          { min: 0, max: 13, label: "낮음", description: "지각된 스트레스 수준이 낮은 편입니다." },
+          { min: 14, max: 26, label: "중간", description: "중간 수준의 스트레스가 시사됩니다." },
+          { min: 27, max: 40, label: "높음", description: "높은 스트레스 수준이 시사됩니다." }
+        ]
+      },
+      "isi-k": {
+        title: "불면(ISI-K)",
+        shortTitle: "ISI-K",
+        maxScore: 28,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 7,
+        optionLabels: ["문제 없음", "약간", "중간", "심함", "매우 심함"],
+        questionLabels: ["입면 어려움", "수면 유지", "조기 각성", "주간 피로"],
+        bands: [
+          { min: 0, max: 7, label: "정상", description: "임상적으로 의미 있는 불면 수준은 낮습니다." },
+          { min: 8, max: 14, label: "경도", description: "초기 개입과 수면위생 교육을 고려할 수 있습니다." },
+          { min: 15, max: 21, label: "중등도", description: "전문 평가가 필요한 수준의 불면이 시사됩니다." },
+          { min: 22, max: 28, label: "고도", description: "적극적인 전문 개입이 권장됩니다." }
+        ]
+      },
+      "ies-r": {
+        title: "사건충격척도(IES-R)",
+        shortTitle: "IES-R",
+        maxScore: 88,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 9,
+        optionLabels: ["전혀 없음", "조금", "보통", "상당함", "극심함"],
+        questionLabels: ["침습적 회상", "회피 반응", "과각성", "정서적 무감각"],
+        bands: [
+          { min: 0, max: 24, label: "낮음", description: "외상 후 스트레스 반응이 상대적으로 낮은 편입니다." },
+          { min: 25, max: 39, label: "주의", description: "외상 후 스트레스 반응에 대한 추가 관찰이 필요합니다." },
+          { min: 40, max: 88, label: "고위험", description: "외상 후 스트레스 반응 고위험군으로 추가 평가가 권장됩니다." }
+        ]
+      },
+      "audit-k": {
+        title: "알코올중독(AUDIT-K)",
+        shortTitle: "AUDIT-K",
+        maxScore: 40,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 10,
+        optionLabels: ["전혀 없음", "가끔", "때때로", "자주", "매우 자주"],
+        questionLabels: ["음주 빈도", "과음 빈도", "절주 어려움", "음주 후 후회"],
+        bands: [
+          { min: 0, max: 7, label: "낮음", description: "위험 음주 가능성이 낮은 편입니다." },
+          { min: 8, max: 15, label: "위험음주", description: "위험 음주 가능성이 시사됩니다." },
+          { min: 16, max: 19, label: "해로운 음주", description: "해로운 음주 수준이 의심됩니다." },
+          { min: 20, max: 40, label: "의존 위험", description: "알코올 의존 수준의 위험이 시사됩니다." }
+        ]
+      },
+      "k-mdq": {
+        title: "조울증(K-MDQ)",
+        shortTitle: "K-MDQ",
+        maxScore: 13,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 3,
+        optionLabels: ["아니오", "예"],
+        questionLabels: ["기분 고양", "활동성 증가", "수면 감소", "판단력 변화"],
+        positiveCutoff: 7
+      },
+      "mkpq-16": {
+        title: "조기정신증(mKPQ-16)",
+        shortTitle: "mKPQ",
+        maxScore: 16,
+        itemCount: 4,
+        itemMaxScore: 4,
+        scaleBias: 4,
+        optionLabels: ["아니오", "예"],
+        questionLabels: ["지각 변화", "의심/경계", "현실감 저하", "사고 혼란"],
+        referenceCutoff: 6
+      },
+      "cri": {
+        title: "정신건강위기평정척도(CRI)",
+        shortTitle: "CRI",
+        maxScore: 92,
+        itemCount: 4,
+        itemMaxScore: 23,
+        scaleBias: 12,
+        optionLabels: ["낮음", "주의", "중간", "높음", "매우 높음"],
+        questionLabels: ["자타해 위험", "정신상태", "기능수준", "지지체계"],
+        grades: [
+          { min: 85, label: "A", description: "정신건강전문요원, 경찰, 119 공조가 필요한 수준입니다." },
+          { min: 70, label: "B", description: "정신과 외래치료 및 전문가 연계가 필요합니다." },
+          { min: 55, label: "C", description: "집중관리와 추가 평가가 필요합니다." },
+          { min: 35, label: "D", description: "주의관찰이 필요합니다." },
+          { min: 0, label: "E", description: "즉각적 위기상황은 아닙니다." }
+        ]
+      }
+    };
+  }
+
+  function buildBundledSampleRecord(subject, subjectIndex, visitIndex, scaleId, offsetDays) {
+    const config = getBundledSampleScaleConfigs()[scaleId];
+    const sessionDate = getBundledSampleDateText(offsetDays);
+    const createdAt = `${sessionDate}T${visitIndex % 2 === 0 ? "09:10:00" : "14:20:00"}+09:00`;
+    const normalizedScore = computeBundledSampleNormalizedScore(subject, subjectIndex, config, visitIndex);
+    const score = Math.max(0, Math.min(config.maxScore, Math.round((normalizedScore / 100) * config.maxScore)));
+    const evaluation = buildBundledSampleEvaluation(config, score, normalizedScore, visitIndex);
+
+    return {
+      id: ["sample", SAMPLE_RECORDS_VERSION, subject.name, scaleId, visitIndex + 1].join("-"),
+      sampleData: true,
+      questionnaireId: scaleId,
+      questionnaireTitle: config.title,
+      shortTitle: config.shortTitle,
+      createdAt,
+      meta: {
+        sessionDate,
+        workerName: subject.workerName,
+        clientLabel: subject.name,
+        birthDate: subject.birthDate,
+        sessionNote: "가상 샘플 데이터 · 비교 분석용"
+      },
+      respondentDisplay: [
+        { label: "성별", value: subject.gender },
+        { label: "연령대", value: getBundledSampleAgeGroup(subject.birthDate) }
+      ],
+      progress: {
+        percent: 100,
+        answered: 4,
+        total: 4,
+        summary: "100% (4/4항목)"
+      },
+      evaluation,
+      breakdown: buildBundledSampleBreakdown(config, score)
+    };
+  }
+
+  function computeBundledSampleNormalizedScore(subject, subjectIndex, config, visitIndex) {
+    const noise = computeBundledSampleNoise(`${subject.name}-${config.shortTitle}-${visitIndex}-${subjectIndex}`);
+    const wavePattern = [0, subject.wave, -4, 6, -2][visitIndex] || 0;
+    return clampNumber(
+      subject.baseRisk +
+      (subject.trend * visitIndex) +
+      (config.scaleBias || 0) +
+      wavePattern +
+      noise,
+      8,
+      96
+    );
+  }
+
+  function computeBundledSampleNoise(seed) {
+    let hash = 0;
+    String(seed || "").split("").forEach((character) => {
+      hash = ((hash << 5) - hash) + character.charCodeAt(0);
+      hash |= 0;
+    });
+    return (Math.abs(hash) % 11) - 5;
+  }
+
+  function buildBundledSampleEvaluation(config, score, normalizedScore, visitIndex) {
+    const band = findBundledSampleBand(config, score, normalizedScore);
+    const flags = [];
+
+    if (config.shortTitle === "CRI" && ["A", "B", "C"].includes(band.label)) {
+      flags.push({ level: "warn", text: `위기 대응 검토 필요 (${band.label}등급)` });
+    } else if (normalizedScore >= 80) {
+      flags.push({ level: "warn", text: `${config.shortTitle} 고위험군 추정` });
+    } else if (normalizedScore >= 60) {
+      flags.push({ level: "info", text: `${config.shortTitle} 주의 관찰 필요` });
+    }
+
+    return {
+      score,
+      maxScore: config.maxScore,
+      normalizedScore: Math.round(normalizedScore * 10) / 10,
+      scoreText: buildBundledSampleScoreText(config, score, visitIndex),
+      bandText: band.label,
+      highlights: [
+        band.description,
+        "가상 추적 데이터로 변화 비교 예시를 제공합니다."
+      ],
+      flags,
+      notes: ["이 기록은 공개 데모용 가상 데이터입니다."]
+    };
+  }
+
+  function buildBundledSampleScoreText(config, score, visitIndex) {
+    if (config.shortTitle === "K-MDQ") {
+      return `예 ${score}개 / ${config.maxScore}개`;
+    }
+    if (config.shortTitle === "mKPQ") {
+      const distressScore = Math.min(32, Math.max(0, (score * 2) + visitIndex + 2));
+      return `예 ${score}개 / 힘듦 ${distressScore}점`;
+    }
+    return `${score}점 / ${config.maxScore}점`;
+  }
+
+  function findBundledSampleBand(config, score, normalizedScore) {
+    if (config.grades) {
+      const matchedGrade = config.grades.find((grade) => normalizedScore >= grade.min) || config.grades.at(-1);
+      return { label: matchedGrade.label, description: matchedGrade.description };
+    }
+
+    if (config.shortTitle === "K-MDQ") {
+      const positive = score >= (config.positiveCutoff || 7);
+      return {
+        label: positive ? "양성 참고 기준 충족" : "양성 참고 기준 미충족",
+        description: positive ? "조울증 선별 양성 참고 기준에 가깝습니다." : "조울증 선별 양성 참고 기준에 미치지 않습니다."
+      };
+    }
+
+    if (config.shortTitle === "mKPQ") {
+      const threshold = config.referenceCutoff || 6;
+      return {
+        label: score >= threshold ? "고위험 참고" : "참고 범위",
+        description: score >= threshold ? "조기정신증 추가 평가가 권장됩니다." : "현재는 참고 범위로 볼 수 있습니다."
+      };
+    }
+
+    const matchedBand = (config.bands || []).find((band) => score >= band.min && score <= band.max) || config.bands?.[0];
+    return {
+      label: matchedBand?.label || "참고 구간 없음",
+      description: matchedBand?.description || ""
+    };
+  }
+
+  function buildBundledSampleBreakdown(config, score) {
+    const scores = distributeBundledSampleScore(score, config.itemCount || 4, config.itemMaxScore || 4);
+    return scores.map((itemScore, index) => ({
+      id: `q${index + 1}`,
+      number: `${index + 1}.`,
+      text: config.questionLabels?.[index] || `핵심 항목 ${index + 1}`,
+      answerLabel: resolveBundledSampleOptionLabel(config, itemScore),
+      score: itemScore
+    }));
+  }
+
+  function distributeBundledSampleScore(totalScore, itemCount, itemMaxScore) {
+    const scores = [];
+    let remaining = Math.max(0, totalScore);
+    let remainingSlots = itemCount;
+
+    for (let index = 0; index < itemCount; index += 1) {
+      const average = remainingSlots > 0 ? Math.round(remaining / remainingSlots) : 0;
+      const bounded = clampNumber(average, 0, itemMaxScore);
+      scores.push(bounded);
+      remaining -= bounded;
+      remainingSlots -= 1;
+    }
+
+    return scores;
+  }
+
+  function resolveBundledSampleOptionLabel(config, score) {
+    const labels = config.optionLabels || [];
+    const index = clampNumber(Math.round(score), 0, Math.max(labels.length - 1, 0));
+    return labels[index] || String(score);
+  }
+
+  function getBundledSampleDateText(offsetDays) {
+    const date = new Date("2025-10-07T09:00:00+09:00");
+    date.setDate(date.getDate() + Number(offsetDays || 0));
+    return date.toISOString().slice(0, 10);
+  }
+
+  function getBundledSampleAgeGroup(birthDateText) {
+    const year = Number(String(birthDateText || "").slice(0, 4));
+    if (!Number.isFinite(year)) {
+      return "";
+    }
+    const age = 2026 - year;
+    if (age < 20) return "10대";
+    if (age < 30) return "20대";
+    if (age < 40) return "30대";
+    if (age < 50) return "40대";
+    if (age < 60) return "50대";
+    return "60대";
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(Math.max(Number(value) || 0, min), max);
   }
 
   function readMetaFields() {
