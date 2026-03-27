@@ -43,7 +43,7 @@ function handleScaleDashboardEdit_(e) {
     return false;
   }
 
-  buildDashboard();
+  refreshScaleScreeningDashboardView_(editedSheet, normalizeText_(editedRange.getDisplayValue()));
   return true;
 }
 
