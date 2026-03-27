@@ -26,100 +26,100 @@ const SCALE_SCREENING_SYNC_CONFIG = {
     settingsSheetName: "척도설정"
   },
   recordHeaders: [
-    "record_id",
-    "exported_at",
-    "sync_scope",
-    "source_app",
-    "organization_name",
-    "team_name",
-    "contact_note",
-    "record_created_at",
-    "session_date",
-    "questionnaire_id",
-    "questionnaire_title",
-    "questionnaire_short_title",
-    "score_text",
-    "normalized_score",
-    "band_text",
-    "worker_name",
-    "client_label",
-    "birth_date",
-    "gender",
-    "age_group",
-    "progress_summary",
-    "progress_percent",
-    "progress_answered",
-    "progress_total",
-    "signature_present",
-    "session_note",
-    "highlights",
-    "flags",
-    "respondent_summary",
-    "breakdown_summary",
-    "record_json"
+    "기록ID",
+    "전송시각",
+    "전송범위",
+    "원본앱",
+    "기관명",
+    "팀명",
+    "연락/안내",
+    "기록생성시각",
+    "검사일",
+    "척도ID",
+    "척도명",
+    "척도약어",
+    "점수표시",
+    "정규화점수",
+    "결과구간",
+    "담당자",
+    "대상자",
+    "생년월일",
+    "성별",
+    "연령대",
+    "응답진행률",
+    "응답진행률(%)",
+    "응답완료문항수",
+    "전체문항수",
+    "서명여부",
+    "비고",
+    "결과요약",
+    "경고",
+    "응답자정보요약",
+    "문항응답요약",
+    "원본JSON"
   ],
   answerHeaders: [
-    "detail_key",
-    "record_id",
-    "exported_at",
-    "session_date",
-    "questionnaire_id",
-    "questionnaire_title",
-    "worker_name",
-    "client_label",
-    "birth_date",
-    "is_subquestion",
-    "parent_question_id",
-    "question_id",
-    "question_number",
-    "question_text",
-    "answer_label",
-    "score",
-    "raw_json"
+    "상세키",
+    "기록ID",
+    "전송시각",
+    "검사일",
+    "척도ID",
+    "척도명",
+    "담당자",
+    "대상자",
+    "생년월일",
+    "하위문항여부",
+    "상위문항ID",
+    "문항ID",
+    "문항번호",
+    "문항내용",
+    "응답값",
+    "점수",
+    "원본JSON"
   ],
   questionnaireHeaders: [
-    "questionnaire_id",
-    "self_seq",
-    "title",
-    "short_title",
-    "recommended_age",
-    "question_count",
-    "respondent_field_count",
-    "question_prompt",
-    "intro_text",
-    "source_reference_page",
-    "source_institution",
-    "source_citation",
-    "scoring_type",
-    "scoring_json",
-    "extraction_notes_json",
-    "questionnaire_json"
+    "척도ID",
+    "selfSeq",
+    "척도명",
+    "척도약어",
+    "권장연령",
+    "문항수",
+    "응답자정보문항수",
+    "문항안내문",
+    "도입문",
+    "출처페이지",
+    "출처기관",
+    "출처표기",
+    "채점유형",
+    "채점JSON",
+    "추출메모JSON",
+    "척도JSON"
   ],
   fieldHeaders: [
-    "field_key",
-    "questionnaire_id",
-    "field_scope",
-    "parent_field_id",
-    "field_id",
-    "field_number",
-    "field_label",
-    "field_text",
-    "field_type",
-    "is_required",
-    "option_count",
-    "field_json"
+    "문항키",
+    "척도ID",
+    "문항범위",
+    "상위문항ID",
+    "문항ID",
+    "문항번호",
+    "문항라벨",
+    "문항내용",
+    "문항유형",
+    "필수여부",
+    "선택지수",
+    "문항JSON"
   ],
   optionHeaders: [
-    "option_key",
-    "questionnaire_id",
-    "field_scope",
-    "parent_field_id",
-    "field_id",
-    "option_order",
-    "option_value",
-    "option_label",
-    "option_score",
-    "option_json"
+    "선택지키",
+    "척도ID",
+    "문항범위",
+    "상위문항ID",
+    "문항ID",
+    "선택지순서",
+    "선택지값",
+    "선택지라벨",
+    "선택지점수",
+    "선택지JSON"
   ],
   workerViewHeaders: [
     "검사일",
@@ -174,36 +174,81 @@ const SCALE_SCREENING_SYNC_CONFIG = {
 
 const SCALE_SCREENING_WORKSPACE_VERSION = "2026-03-27-v8";
 const SCALE_SCREENING_STATUS_CACHE_KEY = "scale_screening_sync_status_v2";
+const SCALE_SCREENING_HEADER_KEY_ALIASES = {
+  "기록ID": "record_id",
+  "전송시각": "exported_at",
+  "전송범위": "sync_scope",
+  "원본앱": "source_app",
+  "기관명": "organization_name",
+  "팀명": "team_name",
+  "연락/안내": "contact_note",
+  "기록생성시각": "record_created_at",
+  "검사일": "session_date",
+  "척도ID": "questionnaire_id",
+  "척도명": "questionnaire_title",
+  "척도약어": "questionnaire_short_title",
+  "점수표시": "score_text",
+  "정규화점수": "normalized_score",
+  "결과구간": "band_text",
+  "담당자": "worker_name",
+  "대상자": "client_label",
+  "생년월일": "birth_date",
+  "성별": "gender",
+  "연령대": "age_group",
+  "응답진행률": "progress_summary",
+  "응답진행률(%)": "progress_percent",
+  "응답완료문항수": "progress_answered",
+  "전체문항수": "progress_total",
+  "서명여부": "signature_present",
+  "비고": "session_note",
+  "결과요약": "highlights",
+  "경고": "flags",
+  "응답자정보요약": "respondent_summary",
+  "문항응답요약": "breakdown_summary",
+  "원본JSON": "record_json",
+  "상세키": "detail_key",
+  "하위문항여부": "is_subquestion",
+  "상위문항ID": "parent_question_id",
+  "문항ID": "question_id",
+  "문항번호": "question_number",
+  "문항내용": "question_text",
+  "응답값": "answer_label",
+  "selfSeq": "self_seq",
+  "권장연령": "recommended_age",
+  "문항수": "question_count",
+  "응답자정보문항수": "respondent_field_count",
+  "문항안내문": "question_prompt",
+  "도입문": "intro_text",
+  "출처페이지": "source_reference_page",
+  "출처기관": "source_institution",
+  "출처표기": "source_citation",
+  "채점유형": "scoring_type",
+  "채점JSON": "scoring_json",
+  "추출메모JSON": "extraction_notes_json",
+  "척도JSON": "questionnaire_json",
+  "문항키": "field_key",
+  "문항범위": "field_scope",
+  "문항라벨": "field_label",
+  "문항유형": "field_type",
+  "필수여부": "is_required",
+  "선택지수": "option_count",
+  "문항JSON": "field_json",
+  "선택지키": "option_key",
+  "선택지순서": "option_order",
+  "선택지값": "option_value",
+  "선택지라벨": "option_label",
+  "선택지점수": "option_score",
+  "선택지JSON": "option_json"
+};
 
 function setupScaleScreeningSyncSheets() {
   setScaleScreeningTargetToCurrentSpreadsheet_(false);
-
-  const recordSheet = ensureScaleScreeningSyncSheet_(
-    getScaleScreeningRecordSheetName_(),
-    SCALE_SCREENING_SYNC_CONFIG.recordHeaders
-  );
-  const answerSheet = ensureScaleScreeningSyncSheet_(
-    getScaleScreeningAnswerSheetName_(),
-    SCALE_SCREENING_SYNC_CONFIG.answerHeaders
-  );
-  const questionnaireSheet = ensureScaleScreeningSyncSheet_(
-    getScaleScreeningQuestionnaireSheetName_(),
-    SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders
-  );
-  const fieldSheet = ensureScaleScreeningSyncSheet_(
-    getScaleScreeningFieldSheetName_(),
-    SCALE_SCREENING_SYNC_CONFIG.fieldHeaders
-  );
-  const optionSheet = ensureScaleScreeningSyncSheet_(
-    getScaleScreeningOptionSheetName_(),
-    SCALE_SCREENING_SYNC_CONFIG.optionHeaders
-  );
-
-  formatScaleScreeningSyncSheet_(recordSheet, SCALE_SCREENING_SYNC_CONFIG.recordHeaders.length);
-  formatScaleScreeningSyncSheet_(answerSheet, SCALE_SCREENING_SYNC_CONFIG.answerHeaders.length);
-  formatScaleScreeningSyncSheet_(questionnaireSheet, SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders.length);
-  formatScaleScreeningSyncSheet_(fieldSheet, SCALE_SCREENING_SYNC_CONFIG.fieldHeaders.length);
-  formatScaleScreeningSyncSheet_(optionSheet, SCALE_SCREENING_SYNC_CONFIG.optionHeaders.length);
+  const coreSheets = ensureScaleScreeningCoreSheets_();
+  const recordSheet = coreSheets.recordSheet;
+  const answerSheet = coreSheets.answerSheet;
+  const questionnaireSheet = coreSheets.questionnaireSheet;
+  const fieldSheet = coreSheets.fieldSheet;
+  const optionSheet = coreSheets.optionSheet;
   const workspaceResult = buildScaleScreeningWorkspace_();
 
   SpreadsheetApp.getUi().alert(
@@ -364,6 +409,7 @@ function doGet(e) {
 
 function buildScaleScreeningAuthorizePage_() {
   try {
+    ensureScaleScreeningCoreSheets_();
     ensureScaleScreeningWorkspaceSchema_();
     applyScaleScreeningDisplayFormats_();
     invalidateScaleScreeningSyncCache_();
@@ -460,6 +506,7 @@ function doPost(e) {
 }
 
 function buildScaleScreeningSyncStatus_() {
+  ensureScaleScreeningCoreSheets_();
   ensureScaleScreeningWorkspaceSchema_();
   applyScaleScreeningDisplayFormats_();
 
@@ -611,8 +658,12 @@ function searchScaleScreeningRecords_(params) {
 function buildScaleHeaderIndexMap_(headers) {
   return (headers || []).reduce(function(result, header, index) {
     const key = normalizeText_(header);
+    const canonicalKey = getScaleScreeningHeaderKey_(header);
     if (key) {
       result[key] = index;
+    }
+    if (canonicalKey) {
+      result[canonicalKey] = index;
     }
     return result;
   }, {});
@@ -1161,7 +1212,10 @@ function buildScaleScreeningAnswerRows_(record, payload) {
 }
 
 function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
-  const keyIndex = headers.indexOf(keyField);
+  const headerKeys = headers.map(function(header) {
+    return getScaleScreeningHeaderKey_(header);
+  });
+  const keyIndex = headerKeys.indexOf(keyField);
   if (keyIndex === -1) {
     throw new Error("키 필드를 찾을 수 없습니다: " + keyField);
   }
@@ -1184,8 +1238,8 @@ function upsertRowsByKey_(sheet, headers, rowObjects, keyField) {
       return;
     }
 
-    const rowValues = headers.map(function(header) {
-      return toCellText_(rowObject[header]);
+    const rowValues = headerKeys.map(function(headerKey) {
+      return toCellText_(rowObject[headerKey]);
     });
 
     if (existingRows[key]) {
@@ -1672,7 +1726,9 @@ function columnToLetterScale_(columnNumber) {
 }
 
 function getExistingRowNumberMap_(sheet, headers, keyField) {
-  const keyIndex = headers.indexOf(keyField);
+  const keyIndex = headers.map(function(header) {
+    return getScaleScreeningHeaderKey_(header);
+  }).indexOf(keyField);
   const result = {};
 
   if (keyIndex === -1 || sheet.getLastRow() < 2) {
@@ -1688,6 +1744,11 @@ function getExistingRowNumberMap_(sheet, headers, keyField) {
   });
 
   return result;
+}
+
+function getScaleScreeningHeaderKey_(header) {
+  const normalizedHeader = normalizeText_(header);
+  return SCALE_SCREENING_HEADER_KEY_ALIASES[normalizedHeader] || normalizedHeader;
 }
 
 function ensureScaleScreeningSyncSheet_(sheetName, headers) {
@@ -1712,6 +1773,43 @@ function ensureScaleScreeningSyncSheet_(sheetName, headers) {
 
   formatScaleScreeningSyncSheet_(sheet, normalizedHeaders.length);
   return sheet;
+}
+
+function ensureScaleScreeningCoreSheets_() {
+  const recordSheet = ensureScaleScreeningSyncSheet_(
+    getScaleScreeningRecordSheetName_(),
+    SCALE_SCREENING_SYNC_CONFIG.recordHeaders
+  );
+  const answerSheet = ensureScaleScreeningSyncSheet_(
+    getScaleScreeningAnswerSheetName_(),
+    SCALE_SCREENING_SYNC_CONFIG.answerHeaders
+  );
+  const questionnaireSheet = ensureScaleScreeningSyncSheet_(
+    getScaleScreeningQuestionnaireSheetName_(),
+    SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders
+  );
+  const fieldSheet = ensureScaleScreeningSyncSheet_(
+    getScaleScreeningFieldSheetName_(),
+    SCALE_SCREENING_SYNC_CONFIG.fieldHeaders
+  );
+  const optionSheet = ensureScaleScreeningSyncSheet_(
+    getScaleScreeningOptionSheetName_(),
+    SCALE_SCREENING_SYNC_CONFIG.optionHeaders
+  );
+
+  formatScaleScreeningSyncSheet_(recordSheet, SCALE_SCREENING_SYNC_CONFIG.recordHeaders.length);
+  formatScaleScreeningSyncSheet_(answerSheet, SCALE_SCREENING_SYNC_CONFIG.answerHeaders.length);
+  formatScaleScreeningSyncSheet_(questionnaireSheet, SCALE_SCREENING_SYNC_CONFIG.questionnaireHeaders.length);
+  formatScaleScreeningSyncSheet_(fieldSheet, SCALE_SCREENING_SYNC_CONFIG.fieldHeaders.length);
+  formatScaleScreeningSyncSheet_(optionSheet, SCALE_SCREENING_SYNC_CONFIG.optionHeaders.length);
+
+  return {
+    recordSheet: recordSheet,
+    answerSheet: answerSheet,
+    questionnaireSheet: questionnaireSheet,
+    fieldSheet: fieldSheet,
+    optionSheet: optionSheet
+  };
 }
 
 function getScaleScreeningTargetSpreadsheet_() {
