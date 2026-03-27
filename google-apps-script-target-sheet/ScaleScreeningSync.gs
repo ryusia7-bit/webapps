@@ -1409,8 +1409,9 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange(trendHeaderCell + ":" + chartEndColumnLetter + String(dashboardConfig.trendStartRow)).clearContent();
   sheet.getRange(namesHelperLetter + "1").setValue("대상자 목록");
 
-  sheet.getRange(dashboardConfig.clientNameCell).clearDataValidations();
-  sheet.getRange("B4").setFormula(`=IF(COUNTIF(${namesHelperLetter}2:${namesHelperLetter},"송지훈"),"송지훈",IFERROR(INDEX(${namesHelperLetter}2:${namesHelperLetter},1),""))`);
+  const clientNameRange = sheet.getRange(dashboardConfig.clientNameCell);
+  clientNameRange.clearDataValidations();
+  clientNameRange.clearContent();
   sheet.getRange("B4:F4").setBackground("#ffffff");
   sheet.getRange("A" + String(detailStartRow)).setFormula(detailFormula);
   sheet.getRange(trendFormulaCell).setFormula(trendFormula);
@@ -1421,7 +1422,18 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .requireValueInRange(sheet.getRange(namesHelperLetter + "2:" + namesHelperLetter), true)
     .setAllowInvalid(true)
     .build();
-  sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
+  clientNameRange.setDataValidation(nameValidation);
+
+  SpreadsheetApp.flush();
+  const candidateNames = sheet.getRange(namesHelperLetter + "2:" + namesHelperLetter + "40").getDisplayValues()
+    .map(function(row) { return normalizeText_(row[0]); })
+    .filter(Boolean);
+  const defaultClientName = candidateNames.filter(function(name) {
+    return name === "송지훈";
+  })[0] || candidateNames[0] || "";
+  if (defaultClientName) {
+    clientNameRange.setValue(defaultClientName);
+  }
 
   sheet.setFrozenRows(11);
   sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
