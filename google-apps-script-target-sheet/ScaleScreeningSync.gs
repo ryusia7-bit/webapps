@@ -1504,7 +1504,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   clientNameMergedRange.setBackground("#ffffff");
   if (candidateSelections.length) {
     const validation = SpreadsheetApp.newDataValidation()
-      .requireValueInRange(helperRange, true)
+      .requireValueInList(candidateSelections, true)
       .setAllowInvalid(true)
       .setHelpText("드롭다운에서 대상자를 선택하거나 직접 입력할 수 있습니다.")
       .build();
