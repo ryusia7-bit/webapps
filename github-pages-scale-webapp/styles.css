@@ -113,6 +113,12 @@ button {
   color: var(--brand);
 }
 
+.eyebrow {
+  margin-bottom: 12px;
+  font-size: 1.64rem;
+  letter-spacing: 0.04em;
+}
+
 .hero h1,
 .scale-head h2 {
   margin: 0;
