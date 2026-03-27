@@ -1476,6 +1476,9 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const previousClientSelection = normalizeText_(sheet.getRange(dashboardConfig.clientNameCell).getDisplayValue());
   const previousSearchText = normalizeText_(sheet.getRange(searchInputCell).getDisplayValue());
 
+  sheet.setFrozenRows(0);
+  sheet.setFrozenColumns(0);
+  sheet.getRange(1, 1, sheet.getMaxRows(), Math.max(sheet.getMaxColumns(), dashboardConfig.namesHelperColumn)).breakApart();
   sheet.clear();
   ensureSheetSize_(sheet, 220, Math.max(12, dashboardConfig.namesHelperColumn));
   sheet.setHiddenGridlines(true);
