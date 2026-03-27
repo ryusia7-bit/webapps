@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindMap 다시서기 | 노숙인 정신건강 척도관리 웹앱</title>
+    <title>정신건강 척도관리 웹앱</title>
     <meta
       name="description"
-      content="다시서기종합지원센터 정신건강팀을 위한 공개형 척도검사 웹앱"
+      content="정신건강 척도검사 입력, 결과 요약, 인쇄, 구글 시트 전송을 위한 웹앱"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,7 +15,6 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
-    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script defer src="./questionnaires-data.js"></script>
     <script defer src="./app.js"></script>
   </head>
@@ -25,34 +24,7 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">MindMap 다시서기</p>
-          <h1>노숙인 정신건강 척도관리 웹앱</h1>
-          <p class="hero-text">
-            누구나 척도검사를 수행할 수 있는 공개형 웹앱입니다. 검사 결과는 현재 브라우저에 저장되며,
-            구글 시트 저장과 비교 분석은 시트 공유 권한이 승인된 사용자만 사용할 수 있습니다.
-          </p>
-          <div class="hero-tags">
-            <span class="hero-tag">공개 검사</span>
-            <span class="hero-tag">기기 저장</span>
-            <span class="hero-tag">승인 사용자 전용 시트 연동</span>
-          </div>
-        </div>
-        <div class="hero-summary card">
-          <p class="summary-label">현재 브라우저 저장 현황</p>
-          <div class="summary-grid">
-            <div class="summary-item">
-              <span class="summary-value" id="summaryRecordCount">0</span>
-              <span class="summary-text">저장 결과</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-value" id="summarySubjectCount">0</span>
-              <span class="summary-text">대상자</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-value" id="summaryScaleCount">9</span>
-              <span class="summary-text">척도</span>
-            </div>
-          </div>
-          <p class="hero-status" id="heroStatusText">초기 준비 중입니다.</p>
+          <h1>정신건강 척도관리 웹앱</h1>
         </div>
       </header>
 
@@ -76,7 +48,7 @@
           <div class="sidebar-note">
             <p class="section-label">운영 메모</p>
             <p>
-              이 버전은 GitHub Pages 공개 배포용입니다. 척도검사는 누구나 수행할 수 있고, 구글 시트 저장/조회는
+              이 버전은 GitHub Pages 공개 배포용입니다. 척도검사는 누구나 수행할 수 있고, 구글 시트 저장은
               대상 시트에 공유 권한이 있는 Google 계정만 사용할 수 있습니다.
             </p>
           </div>
@@ -87,7 +59,6 @@
             <button class="view-tab is-active" type="button" data-view="screening">검사 입력</button>
             <button class="view-tab" type="button" data-view="result">결과 요약</button>
             <button class="view-tab" type="button" data-view="records">저장 결과</button>
-            <button class="view-tab" type="button" data-view="dashboard">비교 분석</button>
             <button class="view-tab" type="button" data-view="deploy">공개 배포 안내</button>
           </div>
 
@@ -122,7 +93,7 @@
                     <p class="section-label">검사 기본정보</p>
                     <h3>검사정보</h3>
                   </div>
-                  <p class="muted">결과 저장과 비교 분석에 함께 사용됩니다.</p>
+                  <p class="muted">결과 저장과 구글 시트 전송에 함께 사용됩니다.</p>
                 </div>
 
                 <div class="meta-grid">
@@ -289,71 +260,6 @@
             </article>
           </section>
 
-          <section class="view-pane hidden" data-pane="dashboard">
-            <article class="card">
-              <div class="section-head">
-                <div>
-                  <p class="section-label">대상자 비교 분석</p>
-                  <h3>변화 대시보드</h3>
-                </div>
-                <div class="inline-actions">
-                  <button id="dashboardRefreshBtn" class="btn btn-secondary" type="button">구글 시트 DB 조회</button>
-                </div>
-              </div>
-
-              <p class="muted">대상자 이름과 생년월일을 기준으로 검사 이력을 묶어서 확인합니다.</p>
-
-              <div class="filter-grid">
-                <label class="text-field">
-                  <span class="text-label">대상자 이름</span>
-                  <input id="dashboardNameInput" type="search" placeholder="예: 홍길동" list="dashboardSubjectSuggestions" />
-                </label>
-                <label class="text-field">
-                  <span class="text-label">생년월일</span>
-                  <input id="dashboardBirthInput" type="date" />
-                </label>
-                <label class="text-field">
-                  <span class="text-label">척도 필터</span>
-                  <select id="dashboardScaleFilter">
-                    <option value="">전체 척도</option>
-                  </select>
-                </label>
-              </div>
-
-              <datalist id="dashboardSubjectSuggestions"></datalist>
-
-              <p id="dashboardStatusText" class="muted">
-                현재 브라우저 저장 결과를 먼저 표시합니다. 구글 시트 DB 조회 버튼을 누르면 누적 DB 기록까지 함께 불러옵니다.
-              </p>
-
-              <div class="dashboard-summary" id="dashboardSummary"></div>
-
-              <div class="chart-card">
-                <canvas id="dashboardChart" height="120"></canvas>
-              </div>
-
-              <div class="table-wrap">
-                <table class="records-table">
-                  <thead>
-                    <tr>
-                      <th>검사일</th>
-                      <th>척도</th>
-                      <th>원점수</th>
-                      <th>정규화</th>
-                      <th>결과</th>
-                      <th>담당자</th>
-                    </tr>
-                  </thead>
-                  <tbody id="dashboardTableBody"></tbody>
-                </table>
-              </div>
-
-              <div id="dashboardEmpty" class="empty-state">
-                저장 결과가 쌓이면 대상자 이름으로 검사 추이를 조회할 수 있습니다.
-              </div>
-            </article>
-          </section>
-
           <section class="view-pane hidden" data-pane="deploy">
             <article class="card">
               <div class="section-head">
@@ -389,8 +295,8 @@
                 <p><strong>권한 승인 절차</strong></p>
                 <ul class="bullet-list">
                   <li>먼저 <strong>권한 승인 페이지</strong>를 열어 Google 로그인과 시트 접근 권한을 승인합니다.</li>
-                  <li>대상 스프레드시트에 공유된 Google 계정만 저장/조회 기능을 사용할 수 있습니다.</li>
-                  <li>권한이 없는 계정은 검사만 가능하고, 시트 저장/조회는 동작하지 않습니다.</li>
+                  <li>대상 스프레드시트에 공유된 Google 계정만 저장 기능을 사용할 수 있습니다.</li>
+                  <li>권한이 없는 계정은 검사와 결과 확인까지만 사용할 수 있습니다.</li>
                 </ul>
                 <div class="inline-actions">
                   <button id="openAuthorizeBtn" class="btn btn-primary" type="button">권한 승인 페이지 열기</button>
@@ -413,8 +319,7 @@
                 <p><strong>연동 동작 방식</strong></p>
                 <ul class="bullet-list">
                   <li>기본 저장은 현재 브라우저에만 수행됩니다.</li>
-                  <li>시트 기능 사용이 켜진 경우에만 구글 시트 DB 저장과 조회를 시도합니다.</li>
-                  <li>대시보드에서는 이름과 생년월일 기준으로 구글 시트 DB를 조회해 그래프를 갱신합니다.</li>
+                  <li>시트 기능 사용이 켜진 경우에만 구글 시트 DB 저장을 시도합니다.</li>
                   <li>척도 마스터 전송은 문항 정의와 선택지 구조를 시트에 맞춰 갱신합니다.</li>
                 </ul>
               </div>
@@ -430,7 +335,7 @@
                 <li>이 폴더 `github-pages-scale-webapp`를 GitHub Pages 배포 대상으로 사용합니다.</li>
                 <li>저장소 루트의 `.github/workflows/deploy-pages.yml`이 `main` 브랜치 푸시 때 자동 배포합니다.</li>
                 <li>GitHub 저장소 설정의 `Pages`에서 Source를 `GitHub Actions`로 지정하면 공개 주소가 활성화됩니다.</li>
-                <li>공동 저장과 비교 분석은 구글 시트 DB 웹앱을 연결해 확장합니다.</li>
+                <li>구글 시트 DB 웹앱을 연결하면 저장 기능을 확장할 수 있습니다.</li>
               </ol>
 
               <div class="deploy-box">

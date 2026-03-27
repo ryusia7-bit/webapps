@@ -61,16 +61,9 @@
     renderQuestionnaireNav();
     setCurrentQuestionnaire(state.manifest[0]?.id || null);
     renderRecordsTable();
-    renderDashboard();
-    updateSummary();
-    setHeroStatus("준비가 끝났습니다. 가명 기반 샘플 검사 결과 100건이 기본 포함되어 있습니다.");
   }
 
   function cacheUi() {
-    ui.summaryRecordCount = document.getElementById("summaryRecordCount");
-    ui.summarySubjectCount = document.getElementById("summarySubjectCount");
-    ui.summaryScaleCount = document.getElementById("summaryScaleCount");
-    ui.heroStatusText = document.getElementById("heroStatusText");
     ui.scaleSearchInput = document.getElementById("scaleSearchInput");
     ui.questionnaireCount = document.getElementById("questionnaireCount");
     ui.questionnaireNav = document.getElementById("questionnaireNav");
@@ -121,16 +114,6 @@
     ui.importJsonBtn = document.getElementById("importJsonBtn");
     ui.importJsonInput = document.getElementById("importJsonInput");
     ui.clearAllBtn = document.getElementById("clearAllBtn");
-    ui.dashboardNameInput = document.getElementById("dashboardNameInput");
-    ui.dashboardBirthInput = document.getElementById("dashboardBirthInput");
-    ui.dashboardScaleFilter = document.getElementById("dashboardScaleFilter");
-    ui.dashboardSubjectSuggestions = document.getElementById("dashboardSubjectSuggestions");
-    ui.dashboardRefreshBtn = document.getElementById("dashboardRefreshBtn");
-    ui.dashboardStatusText = document.getElementById("dashboardStatusText");
-    ui.dashboardSummary = document.getElementById("dashboardSummary");
-    ui.dashboardChart = document.getElementById("dashboardChart");
-    ui.dashboardTableBody = document.getElementById("dashboardTableBody");
-    ui.dashboardEmpty = document.getElementById("dashboardEmpty");
     ui.googleSyncUrl = document.getElementById("googleSyncUrl");
     ui.googleSyncToken = document.getElementById("googleSyncToken");
     ui.googleSyncEnabled = document.getElementById("googleSyncEnabled");
@@ -146,7 +129,6 @@
   function bindEvents() {
     const debouncedScaleSearch = debounce(() => renderQuestionnaireNav(ui.scaleSearchInput.value), 90);
     const debouncedRecordsRender = debounce(() => renderRecordsTable(), 120);
-    const debouncedDashboardCriteria = debounce(() => onDashboardCriteriaChanged(), 180);
 
     ui.scaleSearchInput.addEventListener("input", debouncedScaleSearch);
     ui.tabs.forEach((tab) => {
@@ -177,10 +159,6 @@
     ui.importJsonBtn.addEventListener("click", () => ui.importJsonInput.click());
     ui.importJsonInput.addEventListener("change", onImportJson);
     ui.clearAllBtn.addEventListener("click", onClearAllRecords);
-    ui.dashboardNameInput.addEventListener("input", debouncedDashboardCriteria);
-    ui.dashboardBirthInput.addEventListener("change", onDashboardCriteriaChanged);
-    ui.dashboardScaleFilter.addEventListener("change", onDashboardCriteriaChanged);
-    ui.dashboardRefreshBtn.addEventListener("click", onDashboardRefresh);
     ui.googleSyncUrl.addEventListener("input", onGoogleSyncSettingsInput);
     ui.googleSyncToken.addEventListener("input", onGoogleSyncSettingsInput);
     ui.googleSyncEnabled.addEventListener("change", onGoogleSyncSettingsInput);
@@ -204,7 +182,6 @@
       return Number(qa?.selfSeq || 999) - Number(qb?.selfSeq || 999);
     });
     state.questionnaires = new Map(Object.entries(bundle.questionnaires));
-    ui.summaryScaleCount.textContent = String(state.manifest.length);
     ui.questionnaireCount.textContent = `${state.manifest.length}개`;
   }
 
@@ -232,10 +209,8 @@
 
   function persistRecords() {
     localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(state.records.slice(0, 1000)));
-    updateSummary();
     populateSubjectSuggestions();
     renderRecordsTable();
-    renderDashboard();
   }
 
   function restoreWorkerName() {
@@ -333,15 +308,13 @@
       ui.syncCurrentBtn,
       ui.syncHistoryBtn,
       ui.syncQuestionnairesBtn,
-      ui.checkSyncStatusBtn,
-      ui.dashboardRefreshBtn
+      ui.checkSyncStatusBtn
     ].forEach((button) => {
       if (button) {
         button.disabled = !enabled;
       }
     });
     if (!enabled) {
-      setDashboardStatus("시트 기능 사용이 꺼져 있습니다. 비교 분석은 현재 브라우저 저장 결과만 표시합니다.");
       setSyncStatus("시트 기능 사용이 꺼져 있습니다. 일반 사용자는 검사와 기기 저장만 사용할 수 있습니다.");
     }
   }
@@ -407,6 +380,9 @@
   }
 
   function setDashboardStatus(message, type = "") {
+    if (!ui.dashboardStatusText) {
+      return;
+    }
     ui.dashboardStatusText.textContent = message;
     ui.dashboardStatusText.classList.remove("success", "error");
     if (type) {
@@ -421,8 +397,7 @@
       ui.syncCurrentBtn,
       ui.syncHistoryBtn,
       ui.syncQuestionnairesBtn,
-      ui.checkSyncStatusBtn,
-      ui.dashboardRefreshBtn
+      ui.checkSyncStatusBtn
     ].forEach((button) => {
       if (button) {
         button.disabled = isBusy;
@@ -435,7 +410,7 @@
   }
 
   function renderScaleFilters() {
-    [ui.recordsScaleFilter, ui.dashboardScaleFilter].forEach((select) => {
+    [ui.recordsScaleFilter].filter(Boolean).forEach((select) => {
       select.innerHTML = '<option value="">전체 척도</option>';
       state.manifest.forEach((item) => {
         const option = document.createElement("option");
@@ -1223,7 +1198,6 @@
           <div class="table-actions">
             <button class="table-action" type="button" data-action="view" data-id="${escapeHtml(record.id)}">보기</button>
             <button class="table-action" type="button" data-action="load" data-id="${escapeHtml(record.id)}">불러오기</button>
-            <button class="table-action" type="button" data-action="compare" data-id="${escapeHtml(record.id)}">비교</button>
             <button class="table-action" type="button" data-action="sync" data-id="${escapeHtml(record.id)}">시트전송</button>
             <button class="table-action" type="button" data-action="export" data-id="${escapeHtml(record.id)}">파일</button>
             <button class="table-action danger" type="button" data-action="delete" data-id="${escapeHtml(record.id)}">삭제</button>
@@ -1277,14 +1251,6 @@
         break;
       case "load":
         loadRecordIntoForm(record);
-        break;
-      case "compare":
-        ui.dashboardNameInput.value = record.meta?.clientLabel || "";
-        ui.dashboardBirthInput.value = record.meta?.birthDate || "";
-        ui.dashboardScaleFilter.value = record.questionnaireId || "";
-        renderDashboard();
-        setActiveView("dashboard");
-        await refreshDashboardRemoteRecords(true);
         break;
       case "export":
         exportRecordAsJson(record);
@@ -1402,7 +1368,6 @@
       });
       state.records = [...map.values()].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
       persistRecords();
-      setHeroStatus(`${incoming.length}건의 기록을 가져왔습니다.`);
     } catch (error) {
       alert(`기록 불러오기에 실패했습니다: ${error.message}`);
     } finally {
@@ -1422,7 +1387,6 @@
     state.lastResult = null;
     persistRecords();
     clearResult();
-    setHeroStatus("현재 브라우저 저장 결과를 모두 삭제했습니다.");
   }
 
   async function onSyncCurrentResult() {
@@ -1932,7 +1896,9 @@
     };
 
     renderDatalist(ui.subjectSuggestions);
-    renderDatalist(ui.dashboardSubjectSuggestions);
+    if (ui.dashboardSubjectSuggestions) {
+      renderDatalist(ui.dashboardSubjectSuggestions);
+    }
   }
 
   function setActiveView(view) {
@@ -1942,6 +1908,9 @@
   }
 
   function updateSummary() {
+    if (!ui.summaryRecordCount || !ui.summarySubjectCount || !ui.summaryScaleCount) {
+      return;
+    }
     const subjectKeys = new Set(
       state.records
         .map((record) => {
@@ -1960,6 +1929,9 @@
   }
 
   function setHeroStatus(message) {
+    if (!ui.heroStatusText) {
+      return;
+    }
     ui.heroStatusText.textContent = message;
   }
 
@@ -2173,7 +2145,7 @@
         workerName: subject.workerName,
         clientLabel: subject.name,
         birthDate: subject.birthDate,
-        sessionNote: "가상 샘플 데이터 · 비교 분석용"
+        sessionNote: "가상 샘플 데이터"
       },
       respondentDisplay: [
         { label: "성별", value: subject.gender },
