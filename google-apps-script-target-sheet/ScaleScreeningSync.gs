@@ -1493,8 +1493,8 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange("G6:L6").merge().setValue("후보 목록 클릭으로 대상자를 선택하세요. 아래 종단현황 표는 척도별로 묶은 뒤 각 척도 안에서 검사일 오름차순으로 정렬되며, 직전 검사 대비 증감과 변화 방향을 함께 보여줍니다.");
   sheet.getRange("G8:I10").merge().setValue("검사 건수\n-");
   sheet.getRange("J8:L10").merge().setValue("최근 검사일\n-");
-  sheet.getRange("G11:I13").merge().setValue("평균 정규화점수\n-");
-  sheet.getRange("J11:L13").merge().setValue("검사 척도 수\n-");
+  sheet.getRange("G11:I13").merge().setValue("고위험 건수\n-");
+  sheet.getRange("J11:L13").merge().setValue("최근 담당자\n-");
   sheet.getRange("A" + String(candidateHeaderRow) + ":F" + String(candidateHeaderRow)).setValues([["대상자", "생년월일", "최근 검사일", "최근 척도", "검사 건수", "선택"]]);
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "직전점수", "증감", "변화", "결과구간", "담당자", "비고"]]);
   sheet.getRange("A15:L15").merge().setValue("검사별 종단현황");
@@ -2021,20 +2021,28 @@ function renderScaleScreeningDashboardSummaryCards_(sheet, longitudinalRows) {
         .sort()
         .slice(-1)[0]
     : "-";
-  const normalizedScores = validRows
-    .map(function(row) { return parseScaleDashboardNumber_(row[3]); })
-    .filter(function(score) { return score !== null; });
-  const averageNormalizedScore = normalizedScores.length
-    ? Number((normalizedScores.reduce(function(total, score) { return total + score; }, 0) / normalizedScores.length).toFixed(1))
+  const highRiskCount = validRows.filter(function(row) {
+    return /고|severe/i.test(normalizeText_(row[7]));
+  }).length;
+  const latestRow = validRows.length
+    ? validRows
+        .slice()
+        .sort(function(a, b) {
+          const dateA = formatScaleDashboardDateDisplay_(a[0]) || "";
+          const dateB = formatScaleDashboardDateDisplay_(b[0]) || "";
+          if (dateA === dateB) {
+            return normalizeText_(a[1]).localeCompare(normalizeText_(b[1]), "ko");
+          }
+          return dateA.localeCompare(dateB, "ko");
+        })
+        .slice(-1)[0]
     : null;
-  const scaleCount = validRows.length
-    ? new Set(validRows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
-    : 0;
+  const latestWorker = latestRow ? normalizeText_(latestRow[8]) : "";
 
   sheet.getRange("G8:I10").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
   sheet.getRange("J8:L10").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
-  sheet.getRange("G8:I10").setValue("평균 정규화점수\n" + (averageNormalizedScore === null ? "-" : averageNormalizedScore.toFixed(1)));
-  sheet.getRange("J8:L10").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
+  sheet.getRange("G11:I13").setValue("고위험 건수\n" + (highRiskCount ? highRiskCount + "건" : "-"));
+  sheet.getRange("J11:L13").setValue("최근 담당자\n" + (latestWorker || "-"));
 }
 
 function formatScaleDashboardDateDisplay_(value) {

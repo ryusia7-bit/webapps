@@ -107,20 +107,25 @@ function repairScaleDashboardSummaryCards_(sheet) {
   const latestSessionDate = rows.length
     ? rows.map(function(row) { return normalizeText_(row[0]); }).sort().slice(-1)[0]
     : "-";
-  const normalizedScores = rows
-    .map(function(row) {
-      const parsed = Number(String(row[3]).replace(/,/g, ""));
-      return Number.isFinite(parsed) ? parsed : null;
-    })
-    .filter(function(value) { return value !== null; });
-  const averageNormalizedScore = normalizedScores.length
-    ? (normalizedScores.reduce(function(total, value) { return total + value; }, 0) / normalizedScores.length).toFixed(1)
-    : "-";
-  const scaleCount = rows.length
-    ? new Set(rows.map(function(row) { return normalizeText_(row[1]); }).filter(Boolean)).size
-    : 0;
+  const highRiskCount = rows.filter(function(row) {
+    return /고|severe/i.test(normalizeText_(row[7]));
+  }).length;
+  const latestRow = rows.length
+    ? rows
+        .slice()
+        .sort(function(a, b) {
+          const dateA = formatScaleDashboardDateDisplay_(a[0]) || "";
+          const dateB = formatScaleDashboardDateDisplay_(b[0]) || "";
+          if (dateA === dateB) {
+            return normalizeText_(a[1]).localeCompare(normalizeText_(b[1]), "ko");
+          }
+          return dateA.localeCompare(dateB, "ko");
+        })
+        .slice(-1)[0]
+    : null;
+  const latestWorker = latestRow ? normalizeText_(latestRow[8]) : "";
   sheet.getRange("G8:I10").setValue("검사 건수\n" + (inspectionCount ? inspectionCount + "건" : "-"));
   sheet.getRange("J8:L10").setValue("최근 검사일\n" + (inspectionCount ? latestSessionDate : "-"));
-  sheet.getRange("G11:I13").setValue("평균 정규화점수\n" + averageNormalizedScore);
-  sheet.getRange("J11:L13").setValue("검사 척도 수\n" + (scaleCount ? scaleCount + "종" : "-"));
+  sheet.getRange("G11:I13").setValue("고위험 건수\n" + (highRiskCount ? highRiskCount + "건" : "-"));
+  sheet.getRange("J11:L13").setValue("최근 담당자\n" + (latestWorker || "-"));
 }
