@@ -1489,6 +1489,7 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   sheet.getRange(namesHelperLetter + "1").setValue("대상자 목록");
 
   const clientNameRange = sheet.getRange(dashboardConfig.clientNameCell);
+  const clientNameMergedRange = sheet.getRange("B4:F4");
   const workerSheet = getScaleScreeningTargetSpreadsheet_().getSheetByName(getScaleScreeningWorkerViewSheetName_());
   const candidateSelections = getScaleScreeningDashboardClientSelections_(workerSheet);
   const helperRowCount = Math.max(candidateSelections.length, 1);
@@ -1501,14 +1502,15 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     }));
   }
 
-  clientNameRange.clearDataValidations();
+  clientNameMergedRange.clearDataValidations();
   clientNameRange.clearContent();
-  clientNameRange.setNote("대상자 목록에서 이름과 생년월일 조합을 선택하세요. 목록에 없는 값은 선택할 수 없습니다.");
-  sheet.getRange("B4:F4").setBackground("#ffffff");
+  clientNameRange.setNote("대상자 목록에서 이름과 생년월일 조합을 선택하세요. 직접 입력도 가능하며, 목록에 없는 값이면 검색 결과가 없다고 표시됩니다.");
+  clientNameMergedRange.setBackground("#ffffff");
   if (candidateSelections.length) {
     const validation = SpreadsheetApp.newDataValidation()
       .requireValueInRange(helperRange, true)
-      .setAllowInvalid(false)
+      .setAllowInvalid(true)
+      .setHelpText("드롭다운에서 대상자를 선택하거나 직접 입력할 수 있습니다.")
       .build();
     clientNameRange.setDataValidation(validation);
   }
