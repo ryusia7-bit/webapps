@@ -148,15 +148,14 @@ const SCALE_SCREENING_SYNC_CONFIG = {
   ],
   dashboard: {
     clientNameCell: "B4",
-    birthDateCell: "E4",
-    namesHelperColumn: 60,
-    detailHeaderRow: 31,
-    detailStartRow: 32,
+    namesHelperColumn: 25,
+    detailHeaderRow: 29,
+    detailStartRow: 30,
     trendStartRow: 2,
-    trendStartColumn: 28,
-    chartAnchorRow: 11,
+    trendStartColumn: 14,
+    chartAnchorRow: 12,
     chartAnchorColumn: 1,
-    hiddenColumnsEnd: 52
+    trendColumnCount: 10
   },
   settingsRows: [
     ["항목", "값", "설명"],
@@ -1230,7 +1229,7 @@ function buildScaleScreeningWorkspace_() {
 
   buildScaleScreeningWorkerViewSheet_(workerViewSheet);
   buildScaleScreeningRiskViewSheet_(riskViewSheet);
-  buildDashboard_(dashboardSheet);
+  buildScaleScreeningDashboardSheet_(dashboardSheet);
   buildScaleScreeningSettingsSheet_(settingsSheet);
 
   console.timeEnd("buildScaleScreeningWorkspace");
@@ -1361,9 +1360,10 @@ function buildScaleScreeningDashboardSheet_(sheet) {
   const detailStartRow = dashboardConfig.detailStartRow;
   const trendHeaderCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(detailHeaderRow);
   const trendFormulaCell = columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow);
-  const hiddenColumnsEnd = Number(dashboardConfig.hiddenColumnsEnd || dashboardConfig.namesHelperColumn || 40);
-  const hiddenColumnCount = Math.max(1, hiddenColumnsEnd - dashboardConfig.trendStartColumn + 1);
-  const chartEndColumnLetter = columnToLetterScale_(hiddenColumnsEnd);
+  const trendColumnCount = Number(dashboardConfig.trendColumnCount || 10);
+  const trendEndColumn = dashboardConfig.trendStartColumn + trendColumnCount;
+  const chartEndColumnLetter = columnToLetterScale_(trendEndColumn);
+  const namesHelperLetter = columnToLetterScale_(dashboardConfig.namesHelperColumn);
   const detailFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
@@ -1378,72 +1378,79 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     "}," +
     workerSheetRef + '!B2:B=$B$4' +
     "),1,TRUE),{\"검색 결과가 없습니다.\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\"}))";
-  const trendFormula = "=IF($B$4=\"\",\"\",IFERROR(QUERY(FILTER({" +
+  const trendFormula = "=IF($B$4=\"\",\"\",IFERROR(SORT(QUERY(FILTER({" +
     workerSheetRef + '!A2:A,' +
     workerSheetRef + '!D2:D,' +
-    workerSheetRef + '!F2:F,' +
-    workerSheetRef + '!B2:B,' +
-    workerSheetRef + '!C2:C' +
+    workerSheetRef + '!F2:F' +
     "}," +
     workerSheetRef + '!B2:B=$B$4' +
-    "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),\"\"))";
+    "),\"select Col1, max(Col3) where Col3 is not null group by Col1 pivot Col2 label Col1 '검사일', max(Col3) ''\",0),1,TRUE),\"\"))";
 
   sheet.clear();
-  ensureSheetSize_(sheet, 320, Math.max(hiddenColumnsEnd, dashboardConfig.namesHelperColumn));
+  ensureSheetSize_(sheet, 220, Math.max(trendEndColumn, dashboardConfig.namesHelperColumn));
   sheet.setHiddenGridlines(true);
 
-  sheet.getRange("A1:L1").merge().setValue("척도 검사 결과 대시보드");
-  sheet.getRange("A2:L2").merge().setValue("대상자명을 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다.");
-  sheet.getRange("A4").setValue("대상자명");
+  sheet.getRange("A1:L1").merge().setValue("대상자별 척도 변화 대시보드");
+  sheet.getRange("A2:L2").merge().setValue("대상자명을 선택하면 검사일별 척도 변화 그래프와 최근 검사 이력을 한 화면에서 확인할 수 있습니다.");
+  sheet.getRange("A4").setValue("대상자 검색");
   sheet.getRange("B4:F4").merge();
-  sheet.getRange("G4:L5").merge().setValue("대상자 이름만 입력하면 날짜별 척도 변화와 최근 검사 흐름을 한눈에 확인할 수 있습니다. 정규화점수는 척도별 점수를 0~100 기준으로 환산한 값입니다.");
+  sheet.getRange("G4:L5").merge().setValue("이름만 입력하거나 목록에서 선택하세요. 그래프는 검사일 순으로 정규화점수(0~100)를 연결하며, 아래 표에는 동일 대상자의 최근 검사 이력이 표시됩니다.");
   sheet.getRange("A7:C9").merge().setFormula('=IF($B$4="","검사 건수"&CHAR(10)&"-","검사 건수"&CHAR(10)&IFERROR(COUNTA(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4))&"건","0건"))');
   sheet.getRange("D7:F9").merge().setFormula('=IF($B$4="","최근 검사일"&CHAR(10)&"-","최근 검사일"&CHAR(10)&IFERROR(TEXT(INDEX(SORT(FILTER(' + workerSheetRef + '!A2:A,' + workerSheetRef + '!B2:B=$B$4),1,FALSE),1,1),"yyyy-mm-dd"),"-"))');
   sheet.getRange("G7:I9").merge().setFormula(
     `=IF($B$4="","평균 정규화점수"&CHAR(10)&"-","평균 정규화점수"&CHAR(10)&IFERROR(TEXT(ROUND(AVERAGE(FILTER(${workerSheetRef}!F2:F,${workerSheetRef}!B2:B=$B$4,${workerSheetRef}!F2:F<>"")),1),"0.0"),"-"))`
   );
   sheet.getRange("J7:L9").merge().setFormula(
-    `=IF($B$4="","경고 건수"&CHAR(10)&"-","경고 건수"&CHAR(10)&IFERROR(COUNTIF(FILTER(${workerSheetRef}!K2:K,${workerSheetRef}!B2:B=$B$4),"<>")&"건","0건"))`
+    `=IF($B$4="","검사 척도 수"&CHAR(10)&"-","검사 척도 수"&CHAR(10)&IFERROR(COUNTA(UNIQUE(FILTER(${workerSheetRef}!D2:D,${workerSheetRef}!B2:B=$B$4,${workerSheetRef}!D2:D<>"")))&"종","0종"))`
   );
   sheet.getRange("A" + String(detailHeaderRow) + ":J" + String(detailHeaderRow)).setValues([["검사일", "척도", "원점수", "정규화점수", "점수표시", "결과구간", "담당자", "비고", "경고여부", "기록고유값"]]);
-  sheet.getRange(trendHeaderCell).setValue("점수 변화 그래프 데이터");
-  sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "1").setValue("대상자 목록");
+  sheet.getRange("A11:L11").merge().setValue("검사일별 척도 변화 그래프");
+  sheet.getRange("A28:J28").merge().setValue("최근 검사 이력");
+  sheet.getRange(trendHeaderCell + ":" + chartEndColumnLetter + String(dashboardConfig.trendStartRow)).clearContent();
+  sheet.getRange(namesHelperLetter + "1").setValue("대상자 목록");
 
   sheet.getRange(dashboardConfig.clientNameCell).clearDataValidations();
+  sheet.getRange("B4").setFormula(`=IF(COUNTIF(${namesHelperLetter}2:${namesHelperLetter},"송지훈"),"송지훈",IFERROR(INDEX(${namesHelperLetter}2:${namesHelperLetter},1),""))`);
   sheet.getRange("B4:F4").setBackground("#ffffff");
   sheet.getRange("A" + String(detailStartRow)).setFormula(detailFormula);
   sheet.getRange(trendFormulaCell).setFormula(trendFormula);
-  sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2")
-    .setFormula(`=ARRAYFORMULA(SORT(UNIQUE(FILTER(${workerSheetRef}!B2:B,${workerSheetRef}!B2:B<>""))))`);
+  sheet.getRange(namesHelperLetter + "2")
+    .setFormula(`=ARRAYFORMULA(SORT(UNIQUE(FILTER(${workerSheetRef}!B2:B,${workerSheetRef}!B2:B<>"",NOT(REGEXMATCH(${workerSheetRef}!B2:B,"^\\d+(?:\\.\\d+)?$"))))))`);
 
   const nameValidation = SpreadsheetApp.newDataValidation()
-    .requireValueInRange(sheet.getRange(columnToLetterScale_(dashboardConfig.namesHelperColumn) + "2:" + columnToLetterScale_(dashboardConfig.namesHelperColumn)), true)
+    .requireValueInRange(sheet.getRange(namesHelperLetter + "2:" + namesHelperLetter), true)
     .setAllowInvalid(true)
     .build();
   sheet.getRange(dashboardConfig.clientNameCell).setDataValidation(nameValidation);
 
-  sheet.setFrozenRows(10);
+  sheet.setFrozenRows(11);
   sheet.getRange("A1:L1").setFontSize(20).setFontWeight("bold").setBackground("#123b2d").setFontColor("#ffffff").setHorizontalAlignment("left").setVerticalAlignment("middle");
   sheet.getRange("A2:L2").setFontColor("#4f5b52").setFontSize(10).setBackground("#eef6f1");
   sheet.getRange("A4:F4").setFontWeight("bold").setBackground("#eef6f1");
   sheet.getRange("G4:L5").setBackground("#f8fbf9").setFontColor("#4f5b52").setWrap(true);
   sheet.getRange("A4:L5").setBorder(true, true, true, true, true, true, "#d9e2dc", SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange("A11:L11").setBackground("#16324f").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  sheet.getRange("A28:J28").setBackground("#16324f").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
   styleHeaderRow_(sheet, detailHeaderRow, 10);
-  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + String(dashboardConfig.trendStartRow)).setFontWeight("bold").setBackground("#fff2cc");
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + String(dashboardConfig.trendStartRow)).setFontWeight("bold").setBackground("#eaf2ff");
   styleScaleDashboardCards_(sheet);
   applyScaleBanding_(sheet.getRange(detailHeaderRow, 1, Math.max(sheet.getMaxRows() - detailHeaderRow + 1, 2), 10));
   applyScaleDashboardRules_(sheet);
-  setScaleColumnWidths_(sheet, [95, 140, 85, 105, 120, 105, 105, 180, 140, 160, 90, 90, 90, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95]);
+  setScaleColumnWidths_(sheet, [95, 155, 85, 105, 120, 110, 105, 180, 140, 160, 90, 90, 95, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 160]);
   sheet.getRange("A:A").setNumberFormat("yyyy-mm-dd");
   sheet.getRange("D:D").setNumberFormat("0.0");
   sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + ":" + columnToLetterScale_(dashboardConfig.trendStartColumn))
     .setNumberFormat("yyyy-mm-dd");
+  sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn + 1) + ":" + chartEndColumnLetter)
+    .setNumberFormat("0.0");
   sheet.getRange("A" + String(detailHeaderRow) + ":J320").setFontSize(10).setVerticalAlignment("middle");
   sheet.setRowHeights(1, 1, 34);
   sheet.setRowHeights(2, 1, 26);
   sheet.setRowHeights(4, 2, 28);
   sheet.setRowHeights(7, 3, 28);
-  sheet.setRowHeights(11, 18, 24);
+  sheet.setRowHeights(11, 1, 24);
+  sheet.setRowHeights(12, 16, 24);
+  sheet.setRowHeights(28, 2, 24);
   sheet.setRowHeights(detailHeaderRow, 1, 24);
 
   const charts = sheet.getCharts();
@@ -1451,12 +1458,13 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     sheet.removeChart(chart);
   });
 
-  const chartRange = sheet.getRange(columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + "320");
+  const chartRange = sheet.getRange(
+    columnToLetterScale_(dashboardConfig.trendStartColumn) + String(dashboardConfig.trendStartRow) + ":" + chartEndColumnLetter + "120"
+  );
   const chart = sheet.newChart()
     .asLineChart()
     .addRange(chartRange)
     .setNumHeaders(1)
-    .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.SHOW_BOTH)
     .setOption("title", "검사일별 척도 변화")
     .setOption("legend", { position: "top", textStyle: { fontSize: 11, color: "#344054" } })
     .setOption("hAxis", {
@@ -1475,9 +1483,10 @@ function buildScaleScreeningDashboardSheet_(sheet) {
     .setOption("curveType", "function")
     .setOption("lineWidth", 3)
     .setOption("pointSize", 6)
-    .setOption("chartArea", { left: 60, top: 56, width: "82%", height: "68%" })
+    .setOption("chartArea", { left: 60, top: 50, width: "82%", height: "70%" })
     .setOption("backgroundColor", "#ffffff")
-    .setOption("explorer", { actions: ["dragToZoom", "rightClickToReset"] })
+    .setOption("height", 340)
+    .setOption("width", 860)
     .setOption("series", {
       0: { color: "#3b82f6" },
       1: { color: "#f59e0b" },
@@ -1755,7 +1764,7 @@ function applyScaleScreeningDisplayFormats_() {
     { name: getScaleScreeningAnswerSheetName_(), formats: { "C:C": "yyyy-mm-dd hh:mm", "D:D": "yyyy-mm-dd", "I:I": "yyyy-mm-dd" } },
     { name: getScaleScreeningWorkerViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd", "F:F": "0.0" } },
     { name: getScaleScreeningRiskViewSheetName_(), formats: { "A:A": "yyyy-mm-dd", "C:C": "yyyy-mm-dd" } },
-    { name: getScaleScreeningDashboardSheetName_(), formats: { "A:A": "yyyy-mm-dd", "D:D": "0.0", "E4": "yyyy-mm-dd" } }
+    { name: getScaleScreeningDashboardSheetName_(), formats: { "A:A": "yyyy-mm-dd", "D:D": "0.0", "N:N": "yyyy-mm-dd", "O:W": "0.0" } }
   ];
 
   formatTargets.forEach(function(target) {

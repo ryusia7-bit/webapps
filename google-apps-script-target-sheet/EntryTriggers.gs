@@ -24,7 +24,6 @@ function addCustomMenu() {
     .addItem("척도검사 연동 상태 보기", "showScaleScreeningSyncStatus")
     .addItem("척도검사 조회/대시보드 새로고침", "refreshScaleScreeningWorkspace")
     .addItem("척도대시보드 재구축", "buildDashboard")
-    .addItem("척도검사 샘플 데이터 100건 생성", "seedScaleScreeningSampleData")
     .addSeparator()
     .addSubMenu(ui.createMenu("척도검사 설정")
       .addItem("척도검사 시트 준비", "setupScaleScreeningSyncSheets")
